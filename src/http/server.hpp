@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "engine/engine.hpp"
+#include "engine/backend.hpp"
 #include "numa/topology.hpp"
 #include "text/accent.hpp"
 #include "voice/store.hpp"
@@ -62,9 +62,9 @@ class Histogram {
 // voice states are allocated by that engine's node-local allocator, so a warmed
 // voice is cached per worker rather than globally.
 struct Worker {
-  std::unique_ptr<Engine> engine;
+  std::unique_ptr<Backend> engine;
   std::mutex mu;
-  std::unordered_map<std::string, VoiceState> voices;
+  std::unordered_map<std::string, VoicePtr> voices;
   int node = -1;
   std::atomic<bool> busy{false};
   std::atomic<uint64_t> served{0};
@@ -81,7 +81,7 @@ class Service {
   class Lease;
   Lease acquire();
 
-  const VoiceState& voice_for(Worker& w, const std::string& id);
+  const Voice& voice_for(Worker& w, const std::string& id);
 
   ServerConfig cfg_;
   Bundle bundle_;

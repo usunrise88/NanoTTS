@@ -49,6 +49,8 @@ Bundle Bundle::load(const fs::path& dir) {
 
   Bundle b;
   b.dir = dir;
+  b.architecture = j.value("architecture", b.architecture);
+  b.bundle_name = j.value("bundle_name", dir.filename().string());
   b.sample_rate = j.value("sample_rate", b.sample_rate);
   b.samples_per_frame = j.value("samples_per_frame", b.samples_per_frame);
   b.frame_rate = j.value("frame_rate", b.frame_rate);
@@ -72,8 +74,25 @@ Bundle Bundle::load(const fs::path& dir) {
     b.default_lsd_steps = d.value("lsd_steps", b.default_lsd_steps);
   }
 
-  b.flow_state = parse_states(j.at("flow_lm_state"));
-  b.mimi_state = parse_states(j.at("mimi_state"));
+  if (j.contains("s3")) {
+    const auto& t = j.at("s3");
+    b.s3_latent_dim = t.value("latent_dim", b.s3_latent_dim);
+    b.s3_vocoder_context = t.value("vocoder_context_frames", b.s3_vocoder_context);
+    b.s3_stream_chunk = t.value("stream_chunk_frames", b.s3_stream_chunk);
+    b.s3_speed = t.value("speed", b.s3_speed);
+    if (t.contains("style_ttl_shape")) b.s3_style_ttl = t.at("style_ttl_shape").get<std::vector<int64_t>>();
+    if (t.contains("style_dp_shape")) b.s3_style_dp = t.at("style_dp_shape").get<std::vector<int64_t>>();
+    b.default_guidance = t.value("guidance", b.default_guidance);
+    b.s3_language_tags = t.value("language_tags", b.s3_language_tags);
+    b.s3_default_language = t.value("default_language", b.s3_default_language);
+  }
+
+  // Only the autoregressive family carries recurrent state; s3 runs its graphs
+  // stateless end to end, so demanding these would reject a valid bundle.
+  if (j.contains("flow_lm_state")) b.flow_state = parse_states(j.at("flow_lm_state"));
+  if (j.contains("mimi_state")) b.mimi_state = parse_states(j.at("mimi_state"));
+  if (b.architecture == "pocket" && (b.flow_state.empty() || b.mimi_state.empty()))
+    throw std::runtime_error("bundle declares architecture \"pocket\" but has no state manifest");
 
   // bos_before_voice.npy: a tiny, fixed-layout float32 array. Parsing the numpy
   // header properly is overkill for one 1x1xD tensor, so we take the payload

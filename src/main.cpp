@@ -203,42 +203,57 @@ int cmd_chunks(const Args& a) {
 
 int cmd_info(const Args& a) {
   const auto b = Bundle::load(a.bundle);
-  std::cout << "bundle          " << a.bundle << "\n"
+  std::cout << "bundle          " << a.bundle << " (" << b.bundle_name << ")\n"
+            << "architecture    " << b.architecture << "\n"
             << "sample rate     " << b.sample_rate << " Hz, " << b.frame_rate << " frames/s ("
-            << b.samples_per_frame << " samples/frame)\n"
-            << "flow lm         " << b.num_layers << " layers x " << b.num_heads << " heads x "
-            << b.dim_per_head << " (d_model " << b.cond_dim << ")\n"
-            << "latent dim      " << b.latent_dim << "\n"
-            << "max_seq         " << b.max_seq << " positions, mimi cache " << b.mimi_cache_len
-            << "\n"
-            << "vocab           " << b.vocab_size << "\n"
-            << "states          " << b.flow_state.size() << " flow, " << b.mimi_state.size()
-            << " mimi\n"
-            << "defaults        temperature " << b.default_temperature << ", eos "
-            << b.default_eos_threshold << ", lsd steps " << b.default_lsd_steps << "\n"
-            << "bos_before_voice" << (b.bos_before_voice.empty() ? " missing" : " present") << "\n";
+            << b.samples_per_frame << " samples/frame)\n";
+  // The two families share almost no geometry, and printing the other one's
+  // fields reads as though something is badly misconfigured.
+  if (b.architecture == "pocket") {
+    std::cout << "flow lm         " << b.num_layers << " layers x " << b.num_heads << " heads x "
+              << b.dim_per_head << " (d_model " << b.cond_dim << ")\n"
+              << "latent dim      " << b.latent_dim << "\n"
+              << "max_seq         " << b.max_seq << " positions, mimi cache " << b.mimi_cache_len
+              << "\n"
+              << "vocab           " << b.vocab_size << "\n"
+              << "states          " << b.flow_state.size() << " flow, " << b.mimi_state.size()
+              << " mimi\n"
+              << "defaults        temperature " << b.default_temperature << ", eos "
+              << b.default_eos_threshold << ", lsd steps " << b.default_lsd_steps << "\n"
+              << "bos_before_voice" << (b.bos_before_voice.empty() ? " missing" : " present")
+              << "\n"
+              << "cloning         from a WAV, through the encoder\n";
+  } else if (b.architecture == "s3") {
+    std::cout << "latent dim      " << b.s3_latent_dim << "\n"
+              << "vocoder         " << b.s3_vocoder_context << " frames of context, "
+              << b.s3_stream_chunk << " per chunk\n"
+              << "speed           " << b.s3_speed << ", guidance " << b.default_guidance << "\n"
+              << "text            "
+              << (b.s3_language_tags ? "language tags required" : "no language tags")
+              << ", default " << b.s3_default_language << "\n"
+              << "cloning         not supported: fixed style vectors, no style encoder\n";
+  }
   return 0;
 }
 
 int cmd_generate(const Args& a) {
   const auto topo = Topology::detect();
   auto bundle = Bundle::load(a.bundle);
-  Engine engine(bundle, engine_config(a, topo));
+  auto engine = make_backend(bundle, engine_config(a, topo));
 
-  const auto voice = a.voice.extension() == ".safetensors" && fs::exists(a.voice)
-                         ? engine.load_voice_file(a.voice)
-                         : VoiceState{};
-  if (!voice.state) throw std::runtime_error("--voice must point at a warmed .safetensors file");
+  if (a.voice.extension() != ".safetensors" || !fs::exists(a.voice))
+    throw std::runtime_error("--voice must point at a warmed .safetensors file");
+  const auto voice = engine->load_voice_file(a.voice);
 
   const auto params = gen_params(a, bundle);
   for (int r = 0; r < a.repeat; ++r) {
     std::vector<float> pcm;
-    engine.reset_timings();
+    engine->reset_timings();
     const auto t0 = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point t_first{};
     bool first = true;
 
-    engine.generate(a.text, voice, params, [&](const float* s, size_t n) {
+    engine->generate(a.text, *voice, params, [&](const float* s, size_t n) {
       if (first) {
         t_first = std::chrono::steady_clock::now();
         first = false;
@@ -254,7 +269,7 @@ int cmd_generate(const Args& a) {
     std::cout << "run " << (r + 1) << "/" << a.repeat << "  audio " << dur << " s  wall " << wall
               << " s  RTF " << (wall / (dur > 0 ? dur : 1)) << "  (" << (dur / (wall > 0 ? wall : 1))
               << "x realtime)  TTFB " << ttfb * 1000.0 << " ms\n"
-              << "        " << engine.timings().describe() << "\n";
+              << "        " << engine->timings().describe() << "\n";
     if (r == a.repeat - 1) {
       wav_write(a.output, pcm, bundle.sample_rate);
       std::cout << "wrote " << a.output << "\n";
@@ -266,7 +281,9 @@ int cmd_generate(const Args& a) {
 int cmd_warm(const Args& a) {
   const auto topo = Topology::detect();
   auto bundle = Bundle::load(a.bundle);
-  Engine engine(bundle, engine_config(a, topo));
+  auto engine = make_backend(bundle, engine_config(a, topo));
+  if (!engine->can_clone())
+    throw std::runtime_error("this checkpoint ships fixed voices and cannot learn one from audio");
 
   auto audio = wav_read(a.input);
   if (audio.sample_rate != bundle.sample_rate) {
@@ -277,10 +294,10 @@ int cmd_warm(const Args& a) {
   std::cout << "reference " << seconds << " s\n";
 
   const auto t0 = std::chrono::steady_clock::now();
-  const auto voice = engine.warm_voice(audio.samples);
+  const auto voice = engine->warm_voice(audio.samples);
   const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-  engine.save_voice_file(a.output, voice);
-  std::cout << "warmed in " << wall * 1000.0 << " ms, prefix " << voice.prefix << " frames -> "
+  engine->save_voice_file(a.output, *voice);
+  std::cout << "warmed in " << wall * 1000.0 << " ms, prefix " << voice->prefix_frames << " frames -> "
             << a.output << "\n";
   return 0;
 }
@@ -313,10 +330,13 @@ int cmd_serve(const Args& a) {
 int cmd_import(const Args& a) {
   const auto topo = Topology::detect();
   auto bundle = Bundle::load(a.bundle);
+  // Upstream voice files are a Pocket TTS thing; no other architecture has one.
+  if (bundle.architecture != "pocket")
+    throw std::runtime_error("import is only meaningful for a pocket bundle");
   Engine engine(bundle, engine_config(a, topo));
   const auto voice = engine.import_upstream_voice(a.input);
-  engine.save_voice_file(a.output, voice);
-  std::cout << "imported prefix " << voice.prefix << " frames -> " << a.output << "\n";
+  engine.save_voice_file(a.output, *voice);
+  std::cout << "imported prefix " << voice->prefix_frames << " frames -> " << a.output << "\n";
   return 0;
 }
 

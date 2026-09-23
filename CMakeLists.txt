@@ -80,8 +80,12 @@ add_library(nanotts_core STATIC
   src/model/state.cpp
   src/model/tokenizer.cpp
   src/engine/engine.cpp
+  src/engine/s3.cpp
+  src/engine/factory.cpp
   src/text/accent.cpp
   src/text/text.cpp
+  src/text/numbers.cpp
+  src/text/s3_text.cpp
   src/voice/store.cpp
   src/voice/safetensors.cpp
   src/audio/wav.cpp

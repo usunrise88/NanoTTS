@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/backend.hpp"
 #include "model/bundle.hpp"
 #include "text/accent.hpp"
 #include "model/state.hpp"
@@ -14,45 +15,11 @@
 
 namespace nanotts {
 
-struct EngineConfig {
-  std::filesystem::path tokenizer_path;
-  bool int8 = false;
-  int threads = 4;
-  int numa_node = -1;          // -1 leaves allocation and pinning alone
-  std::vector<int> cpus;       // logical CPUs this engine may run on
-  bool allow_spinning = true;  // off when several engines share a machine
-  int max_slots = 8;           // batch width of the AR graph
-  // Shared across workers so one cache serves the whole service.
-  std::shared_ptr<Accentuator> accent;
-};
-
-struct GenParams {
-  float temperature = 0.5f;
-  float eos_threshold = -1.0f;
-  int lsd_steps = 1;
-  int max_frames = 500;
-  int first_chunk_frames = 2;  // small first chunk keeps TTFB down
-  int chunk_frames = 15;
-  uint64_t seed = 0;  // 0 means "pick one"
-  bool auto_accent = true;  // ignored when no sidecar is configured
-};
-
-// A warmed voice: the FlowLM cache after the reference audio has been run
-// through, plus how many positions it occupies.
-struct VoiceState {
+// A warmed voice for this backend: the FlowLM cache after the reference audio
+// has been run through, plus how many positions it occupies.
+struct VoiceState : Voice {
   std::unique_ptr<StateBuffers> state;
   int64_t prefix = 0;
-};
-
-// Where the wall clock went, in milliseconds. Kept always-on: the counters are
-// two integer adds per stage and TTFB work is impossible to direct without them.
-struct Timings {
-  // `accent` is what TTFB pays; `accent_hidden` is what overlapped with audio.
-  double accent = 0, accent_hidden = 0, voice_copy = 0, text_cond = 0, prefill = 0, ar_main = 0, flow = 0,
-         decode = 0;
-  int frames = 0, chunks = 0;
-  void reset() { *this = Timings{}; }
-  std::string describe() const;
 };
 
 // Thin wrapper that resolves graph I/O names to indices once, so the AR loop
@@ -75,29 +42,30 @@ class Graph {
   std::vector<std::string> input_names_, output_names_;
 };
 
-class Engine {
+class Engine : public Backend {
  public:
   Engine(Bundle bundle, EngineConfig cfg);
-  ~Engine();
+  ~Engine() override;
 
-  const Bundle& bundle() const { return bundle_; }
-  const Timings& timings() const { return timings_; }
-  void reset_timings() { timings_.reset(); }
+  const Bundle& bundle() const override { return bundle_; }
+  const Timings& timings() const override { return timings_; }
+  void reset_timings() override { timings_.reset(); }
   const Tokenizer& tokenizer() const { return *tokenizer_; }
-  int numa_node() const { return cfg_.numa_node; }
+  int numa_node() const override { return cfg_.numa_node; }
+  bool can_clone() const override { return true; }
 
   // Reference audio (mono, bundle sample rate) -> warmed voice state.
-  VoiceState warm_voice(const std::vector<float>& audio);
+  VoicePtr warm_voice(const std::vector<float>& audio) override;
 
-  VoiceState load_voice_file(const std::filesystem::path& p);
-  void save_voice_file(const std::filesystem::path& p, const VoiceState& v);
+  VoicePtr load_voice_file(const std::filesystem::path& p) override;
+  void save_voice_file(const std::filesystem::path& p, const Voice& v) override;
   // Import a genvoice/xVibePocketTTS voice, which uses the upstream layout.
-  VoiceState import_upstream_voice(const std::filesystem::path& p);
+  VoicePtr import_upstream_voice(const std::filesystem::path& p);
 
-  // Single-stream synthesis. `on_audio` receives 24 kHz mono float frames as
-  // they are decoded and returns false to abort.
-  void generate(const std::string& text, const VoiceState& voice, const GenParams& params,
-                const std::function<bool(const float*, size_t)>& on_audio);
+  // Single-stream synthesis. `on_audio` receives mono float frames at the
+  // bundle's sample rate as they are decoded and returns false to abort.
+  void generate(const std::string& text, const Voice& voice, const GenParams& params,
+                const std::function<bool(const float*, size_t)>& on_audio) override;
 
  private:
   struct FlowRun {

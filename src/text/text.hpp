@@ -12,6 +12,10 @@ namespace nanotts {
 // is not in front of a Russian vowel stays literal, so "C++" and "2+2" survive.
 std::string to_model_stress(const std::string& text);
 
+// The inverse: U+0301 after a vowel becomes `+` before it. The s3 family was
+// trained on the `+` spelling, so the two notations have to be convertible.
+std::string to_plus_stress(const std::string& text);
+
 // Port of pocket_tts prepare_text_prompt. Returns the prepared text and the
 // model's frames_after_eos guess. The single-pass "  " -> " " collapse is not
 // idempotent; that is upstream behaviour and changing it changes the chunking.

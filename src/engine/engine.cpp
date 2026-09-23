@@ -61,29 +61,9 @@ float f16_to_f32(uint16_t h) {
   return f;
 }
 
-std::string affinity_string(const std::vector<int>& cpus, int threads) {
-  // ORT wants one entry per worker thread, and the calling thread is not one
-  // of them, hence threads-1 entries.
-  if (cpus.empty() || threads <= 1) return {};
-  std::ostringstream os;
-  for (int t = 1; t < threads; ++t) {
-    if (t > 1) os << ';';
-    os << cpus[static_cast<size_t>(t) % cpus.size()];
-  }
-  return os.str();
-}
 
 }  // namespace
 
-std::string Timings::describe() const {
-  std::ostringstream os;
-  os.setf(std::ios::fixed);
-  os.precision(1);
-  os << "accent " << accent << " (+" << accent_hidden << " скрыто)" << "  voice_copy " << voice_copy << "  text_cond " << text_cond << "  prefill " << prefill
-     << "  ar_main " << ar_main << "  flow " << flow << "  decode " << decode << "  (" << frames
-     << " frames, " << chunks << " chunks)";
-  return os.str();
-}
 
 // ---------------------------------------------------------------- Graph
 
@@ -322,7 +302,7 @@ void Engine::decode_frames(const std::vector<float>& latents, int64_t frames, St
   out.assign(audio, audio + n);
 }
 
-VoiceState Engine::warm_voice(const std::vector<float>& audio) {
+VoicePtr Engine::warm_voice(const std::vector<float>& audio) {
   // The encoder graph was traced frame-aligned, so the caller's audio is padded
   // up to a whole frame before it goes in.
   const size_t spf = static_cast<size_t>(bundle_.samples_per_frame);
@@ -355,16 +335,17 @@ VoiceState Engine::warm_voice(const std::vector<float>& audio) {
   if (prompt_frames > bundle_.max_seq)
     throw std::runtime_error("reference audio is too long for this bundle's max_seq");
 
-  VoiceState v;
-  v.state = std::make_unique<StateBuffers>(bundle_.flow_state, 1, alloc_.get());
-  v.state->reset();
+  auto v = std::make_shared<VoiceState>();
+  v->state = std::make_unique<StateBuffers>(bundle_.flow_state, 1, alloc_.get());
+  v->state->reset();
   const float empty_seq = 0.f;
-  run_main(&empty_seq, 0, prompt.data(), prompt_frames, *v.state, 1);
-  v.prefix = prompt_frames;
+  run_main(&empty_seq, 0, prompt.data(), prompt_frames, *v->state, 1);
+  v->prefix = prompt_frames;
+  v->prefix_frames = prompt_frames;
   return v;
 }
 
-VoiceState Engine::load_voice_file(const fs::path& p) {
+VoicePtr Engine::load_voice_file(const fs::path& p) {
   const auto tensors = st_load(p);
   VoiceState v;
   v.state = std::make_unique<StateBuffers>(bundle_.flow_state, 1, alloc_.get());
@@ -384,10 +365,14 @@ VoiceState Engine::load_voice_file(const fs::path& p) {
   }
   const int64_t* step = reinterpret_cast<const int64_t*>(v.state->slot_ptr(0, 0));
   v.prefix = *step;
-  return v;
+  v.prefix_frames = v.prefix;
+  return std::make_shared<VoiceState>(std::move(v));
 }
 
-void Engine::save_voice_file(const fs::path& p, const VoiceState& v) {
+void Engine::save_voice_file(const fs::path& p, const Voice& voice) {
+  const auto* vp = dynamic_cast<const VoiceState*>(&voice);
+  if (vp == nullptr) throw std::runtime_error("voice does not belong to this backend");
+  const VoiceState& v = *vp;
   std::vector<std::pair<std::string, StTensor>> tensors;
   for (size_t i = 0; i < bundle_.flow_state.size(); ++i) {
     const auto& spec = bundle_.flow_state[i];
@@ -403,7 +388,7 @@ void Engine::save_voice_file(const fs::path& p, const VoiceState& v) {
            {"prefix_frames", std::to_string(v.prefix)}});
 }
 
-VoiceState Engine::import_upstream_voice(const fs::path& p) {
+VoicePtr Engine::import_upstream_voice(const fs::path& p) {
   // Upstream stores transformer.layers.N.self_attn/{offset,pad,cache} with the
   // cache as [2,1,T,H,Dh] fp32. Here K and V are separate fp16 buffers of
   // capacity max_seq and the position is one shared vector.
@@ -446,12 +431,16 @@ VoiceState Engine::import_upstream_voice(const fs::path& p) {
   }
   *reinterpret_cast<int64_t*>(v.state->slot_ptr(0, 0)) = prefix;
   v.prefix = prefix;
+  v.prefix_frames = prefix;
   (void)f16_to_f32;
-  return v;
+  return std::make_shared<VoiceState>(std::move(v));
 }
 
-void Engine::generate(const std::string& text, const VoiceState& voice, const GenParams& params,
+void Engine::generate(const std::string& text, const Voice& voice_in, const GenParams& params,
                       const std::function<bool(const float*, size_t)>& on_audio) {
+  const auto* voice_p = dynamic_cast<const VoiceState*>(&voice_in);
+  if (voice_p == nullptr) throw std::runtime_error("voice does not belong to this backend");
+  const VoiceState& voice = *voice_p;
   // `+vowel` becomes U+0301 first, so hand-written stress is already in the
   // model's notation before the sidecar sees it — and so the sidecar can tell
   // which words to leave alone.

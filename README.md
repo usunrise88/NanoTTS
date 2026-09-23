@@ -2,15 +2,23 @@
 
 # NanoTTS
 
-A production CPU inference server for [Kyutai **Pocket TTS**](https://huggingface.co/kyutai/pocket-tts)
-and its fine-tunes. Derived from [VolgaGerm/PocketTTS.cpp](https://github.com/VolgaGerm/PocketTTS.cpp)
-(MIT) and rewritten for multi-threaded serving, NUMA locality and an
-OpenAI-compatible HTTP API.
+A production CPU inference server for small speech models:
+[Kyutai **Pocket TTS**](https://huggingface.co/kyutai/pocket-tts) and its
+fine-tunes, and the **Supertonic 3** family (Supertonic 3 itself and
+TeraTTS v2). Derived from
+[VolgaGerm/PocketTTS.cpp](https://github.com/VolgaGerm/PocketTTS.cpp) (MIT) and
+rewritten for multi-threaded serving, NUMA locality and an OpenAI-compatible
+HTTP API.
 
-Pocket TTS is small enough to be genuinely fast on a CPU — six transformer layers
-over a 12.5 Hz Mimi codec — and this is what it takes to serve it: warmed voices
-that start from a `memcpy`, five stateless ONNX graphs, weights replicated per
-NUMA node, and streaming from the first frame.
+These models are small enough to be genuinely fast on a CPU, and this is what it
+takes to serve them: warmed voices that start from a `memcpy`, stateless ONNX
+graphs, weights replicated per NUMA node, and streaming from the first frame.
+
+The two architectures have almost nothing in common below the waterline — one is
+autoregressive over a 12.5 Hz codec, the other sizes an utterance and solves it
+in a single flow-matching pass — so they sit behind a backend interface. The
+HTTP API, streaming, the audio formats, NUMA placement, metrics and the console
+are shared; `architecture` in the bundle manifest picks the rest.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/usunrise88/NanoTTS/main/install.sh | bash
@@ -41,6 +49,8 @@ git, and about 12 GiB of disk for the export.
 
 ## Models
 
+### Pocket TTS and its fine-tunes (`architecture: pocket`)
+
 Anything the `pocket-tts` package can load, because the exporter goes through
 `TTSModel.load_model`:
 
@@ -57,9 +67,39 @@ The runtime reads its geometry from the exported manifest — layer count, heads
 latent dim, frame rate — so the 24-layer variants work exactly like the 6-layer
 ones.
 
-**Everything measured below was measured on the Russian fine-tune.** The other
-checkpoints go through the same code and export cleanly, but their numbers are
-not ours to quote.
+### Supertonic 3 and TeraTTS v2 (`architecture: s3`)
+
+| `--model` | What it is |
+|---|---|
+| `TeraSpace/TeraTTSv2` | Russian and English, 44.1 kHz, ten shipped voices |
+| `Supertone/supertonic-3` | English, Korean and Japanese, 44.1 kHz |
+
+These two release ONNX rather than weights, so there is nothing to trace: the
+install downloads the graphs and converts the voices. They share an
+architecture — the graph interfaces are identical down to the tensor shapes,
+only one output name differs — but not their text conventions, and those live
+in the manifest rather than in code.
+
+They differ from Pocket TTS in two ways that matter more than the file format:
+
+- **TTFB grows with the length of the text.** A duration predictor sizes the
+  whole utterance and one flow-matching pass fills all of it in before anything
+  can be heard; only the vocoder streams. Pocket TTS emits its first frame
+  immediately and does not care how long the text is. Measured on the reference
+  machine: 564 ms for a three-word sentence, 755 ms for a ten-word one, against
+  a flat ~171 ms without stress marks for Pocket.
+- **No voice cloning.** The releases ship fixed style vectors and no style
+  encoder, so `POST /v1/voices` answers 501 and says why. You get the voices
+  the checkpoint came with.
+
+TeraTTS also has a 134-character vocabulary with no digits, so numbers are
+spelled out before they reach the encoder — unexpanded, a digit is not
+mispronounced, it is dropped along with what it meant. The speller matches
+num2words on 382 of 382 reference cases, including Russian gender agreement.
+
+**Everything measured below was measured on the Russian Pocket fine-tune.** The
+other checkpoints go through the same code, but their numbers are not ours to
+quote.
 
 ## What's in it
 

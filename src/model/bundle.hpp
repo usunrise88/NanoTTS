@@ -21,6 +21,13 @@ struct StateSpec {
 struct Bundle {
   std::filesystem::path dir;
 
+  /** Which family of graphs this bundle holds, and therefore which backend
+   *  reads it. "pocket" is Kyutai Pocket TTS and its fine-tunes; "s3" is the
+   *  Supertonic 3 / TeraTTS v2 shape -- text encoder, duration predictor,
+   *  flow-matching sampler, vocoder, with voices as style vectors. */
+  std::string architecture = "pocket";
+  std::string bundle_name;
+
   int sample_rate = 24000;
   int samples_per_frame = 1920;
   double frame_rate = 12.5;
@@ -40,6 +47,24 @@ struct Bundle {
   float default_temperature = 0.5f;
   float default_eos_threshold = -1.0f;
   int default_lsd_steps = 1;
+
+  // --- s3 only ---------------------------------------------------------
+  // The sampler works on `s3_latent_dim` channels and the vocoder turns each
+  // latent frame into `samples_per_frame` samples. `s3_style_ttl` and
+  // `s3_style_dp` are the shapes a voice file must carry, and
+  // `s3_vocoder_context` is how many frames of overlap the vocoder needs to
+  // decode a chunk without a seam.
+  int s3_latent_dim = 144;
+  int s3_vocoder_context = 20;
+  int s3_stream_chunk = 16;
+  float s3_speed = 1.05f;
+  // TeraTTS v2 was trained with literal <ru>...</ru> spans in the text and
+  // rejects input without them; Supertonic 3 has no language embedding.
+  bool s3_language_tags = false;
+  std::string s3_default_language = "ru";
+  std::vector<int64_t> s3_style_ttl{1, 50, 256};
+  std::vector<int64_t> s3_style_dp{1, 8, 16};
+  float default_guidance = 3.0f;
 
   std::vector<StateSpec> flow_state;
   std::vector<StateSpec> mimi_state;

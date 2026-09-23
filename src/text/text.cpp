@@ -149,6 +149,25 @@ std::string replace_double_space_once(const std::string& s) {
 
 }  // namespace
 
+std::string to_plus_stress(const std::string& text) {
+  const auto cps = utf8_decode(text);
+  std::vector<uint32_t> out;
+  out.reserve(cps.size());
+  for (size_t i = 0; i < cps.size(); ++i) {
+    // A combining acute always follows the vowel it marks, so the `+` goes in
+    // front of the codepoint already written.
+    if (cps[i] == 0x0301 && !out.empty()) {
+      const uint32_t vowel = out.back();
+      out.pop_back();
+      out.push_back('+');
+      out.push_back(vowel);
+      continue;
+    }
+    out.push_back(cps[i]);
+  }
+  return utf8_encode(out);
+}
+
 std::pair<std::string, int> prepare_text_prompt(const std::string& input, bool pad_with_spaces,
                                                 bool remove_semicolons) {
   std::string text = strip(input);

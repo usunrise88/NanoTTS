@@ -97,13 +97,13 @@ Service::Lease Service::acquire() {
   return Lease(this, w);
 }
 
-const VoiceState& Service::voice_for(Worker& w, const std::string& id) {
+const Voice& Service::voice_for(Worker& w, const std::string& id) {
   auto it = w.voices.find(id);
-  if (it != w.voices.end()) return it->second;
+  if (it != w.voices.end()) return *it->second;
   const auto path = store_.path_for(id);
   if (!fs::exists(path)) throw std::runtime_error("unknown voice: " + id);
   auto state = w.engine->load_voice_file(path);
-  return w.voices.emplace(id, std::move(state)).first->second;
+  return *w.voices.emplace(id, std::move(state)).first->second;
 }
 
 // ---------------------------------------------------------------- service
@@ -163,7 +163,7 @@ Service::Service(ServerConfig cfg, Bundle bundle)
 
       auto w = std::make_unique<Worker>();
       w->node = node;
-      w->engine = std::make_unique<Engine>(bundle_, ec);
+      w->engine = make_backend(bundle_, ec);
       std::cout << "worker " << workers_.size() << ": node " << node << ", threads " << ec.threads
                 << ", cpus [";
       for (size_t i = 0; i < ec.cpus.size(); ++i) std::cout << (i ? "," : "") << ec.cpus[i];
@@ -455,6 +455,18 @@ int Service::run() {
                       "application/json");
       return;
     }
+    // Architectures that ship fixed style vectors have no encoder to make one
+    // from a recording. That is a missing capability, not a bad request, and
+    // saying so before reading the upload saves the caller the transfer.
+    if (!workers_.empty() && !workers_.front()->engine->can_clone()) {
+      res.status = 501;
+      res.set_content(error_body("this model ships fixed voices and has no style encoder, so it "
+                                 "cannot learn one from a recording; pick one of its own voices",
+                                 "invalid_request_error", "cloning_unsupported")
+                          .dump(),
+                      "application/json");
+      return;
+    }
     const auto& file = req.get_file_value("file");
 
     auto lease = acquire();
@@ -474,7 +486,7 @@ int Service::run() {
       const auto t0 = clock_t_::now();
       auto voice = lease->engine->warm_voice(audio.samples);
       const double ms = std::chrono::duration<double, std::milli>(clock_t_::now() - t0).count();
-      lease->engine->save_voice_file(store_.path_for(id), voice);
+      lease->engine->save_voice_file(store_.path_for(id), *voice);
       store_.save_reference(id, file.content, report_json(report, src_rate).dump());
       // Invalidate every worker's cached copy. This worker's mutex is already
       // held by the lock above, and std::mutex is not recursive, so it has to
@@ -488,8 +500,8 @@ int Service::run() {
         w->voices.erase(id);
       }
       res.set_content(json{{"id", id},
-                           {"prefix_frames", voice.prefix},
-                           {"seconds", static_cast<double>(voice.prefix) / bundle_.frame_rate},
+                           {"prefix_frames", voice->prefix_frames},
+                           {"seconds", static_cast<double>(voice->prefix_frames) / bundle_.frame_rate},
                            {"source_sample_rate", src_rate},
                            {"warm_ms", ms},
                            {"reference", report_json(report, src_rate)}}

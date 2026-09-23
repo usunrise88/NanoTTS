@@ -172,6 +172,16 @@ preflight() {
 
 # ---------------------------------------------------------------- model
 
+# Checkpoints that ship ONNX need fetching, not tracing: Supertonic 3 and
+# TeraTTS v2 release graphs rather than weights, so they take a different path
+# through the export step and a different backend at runtime.
+is_s3_model() {
+  case "$MODEL" in
+    Supertone/*|*upertonic*|TeraSpace/*|*eraTTS*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # Turns whatever the user passed into the export's arguments.
 #   english, spanish_24l     -> --language NAME   (built into pocket-tts)
 #   owner/name               -> --config hf://owner/name/config.yaml
@@ -192,7 +202,9 @@ wants_accent() {
     off) return 1 ;;
   esac
   case "$MODEL" in
-    *[Rr]ussian*|*ussian*|*xVibe*|*XVibe*|genvoice/*) return 0 ;;
+    # TeraTTS v2 is Russian and English and was trained on stressed text;
+    # Supertonic is en/ko/ja and has no use for a Russian accentuator.
+    *[Rr]ussian*|*ussian*|*xVibe*|*XVibe*|genvoice/*|TeraSpace/*|*eraTTS*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -218,10 +230,22 @@ build_bundle() {
     info "bundle already present, skipping the export (delete $BUNDLE to redo it)"
     return
   fi
-  step "Exporting ${MODEL} to ONNX"
-  info "this downloads the checkpoint and traces five graphs; it takes a few minutes"
   mkdir -p "$BUNDLE"
   docker build -q -t nanotts-export "$SRC/tools/export" >/dev/null
+
+  if is_s3_model; then
+    step "Fetching ${MODEL}"
+    info "this release ships ONNX, so there is nothing to trace -- only ~640 MB to download"
+    mkdir -p "$DATA"
+    docker run --rm -v "$SRC/tools/export:/work" -v "$BUNDLE:/out" -v "$DATA:/voices" -w /work \
+      nanotts-export python fetch_s3.py --model "$MODEL" --out /out --voices /voices
+    [ -f "$BUNDLE/bundle.json" ] || die "the fetch produced no bundle.json"
+    ok "$(du -sh "$BUNDLE" | cut -f1) in $BUNDLE"
+    return
+  fi
+
+  step "Exporting ${MODEL} to ONNX"
+  info "this downloads the checkpoint and traces five graphs; it takes a few minutes"
 
   # beartype rejects the symbolic tensors the tracer feeds through, and the
   # export is the one place that matters.
@@ -247,6 +271,10 @@ build_bundle() {
 # Checkpoints that ship their own get those; anything else gets the voice
 # pocket-tts would pick for that language.
 build_voices() {
+  if is_s3_model; then
+    info "voices came with the checkpoint"
+    return
+  fi
   if [ -n "$(ls -A "$DATA" 2>/dev/null)" ]; then
     info "voices already present, leaving them alone"
     return
@@ -296,6 +324,11 @@ write_compose() {
   local precision_flag=""
   [ "$PRECISION" = int8 ] && precision_flag="      - --int8"
 
+  # The two architectures name their text front-end differently: a sentencepiece
+  # model for pocket, a codepoint table for s3.
+  local tokenizer_file="/models/bundle/tokenizer.model"
+  [ -f "$BUNDLE/unicode_indexer.json" ] && tokenizer_file="/models/bundle/unicode_indexer.json"
+
   # The voice directory is a bind mount, so the container has to write it as
   # whoever owns it on the host. Left as the image's own user, uploads through
   # POST /v1/voices fail and warmed voices come back unreadable -- which looks
@@ -324,7 +357,7 @@ ${run_as}
     command:
       - serve
       - --bundle=/models/bundle
-      - --tokenizer=/models/bundle/tokenizer.model
+      - --tokenizer=${tokenizer_file}
       - --voices=/data/voices
       - --port=8080
 ${precision_flag}
