@@ -1,0 +1,14 @@
+# Weights and exported graphs: fetched or produced, never committed.
+assets/weights/*.safetensors
+bundle/*.onnx
+build/
+
+# The running service's bearer key.
+.api-key
+
+# Uploaded voices and their reference recordings. These are real people, so
+# they stay on the machine that warmed them; the server recreates any of them
+# from a WAV through POST /v1/voices.
+voices/*.safetensors
+!voices/male_deep.safetensors
+voices/refs/

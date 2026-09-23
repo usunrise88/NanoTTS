@@ -1,0 +1,48 @@
+services:
+  accent:
+    build:
+      context: ../accent
+    image: xvibe-accent:latest
+    # Models are baked into the image, so this starts without network access.
+    # Given its own NUMA node: sharing cores with the synth cost ~180 ms of TTFB.
+    cpuset: "12-15,28-31"
+    environment:
+      # Four ONNX threads per accentuator took the median accentuation from 102
+      # to 59 ms; three instances then still fit the node's eight logical CPUs.
+      RUACCENT_POOL: "3"
+      RUACCENT_THREADS: "4"
+    restart: unless-stopped
+    networks: [xvibe]
+
+  xvibe-tts:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: xvibe-tts:latest
+    depends_on: [accent]
+    ports: ["8080:8080"]
+    volumes:
+      - ../bundle:/models/bundle:ro
+      - ./data/voices:/data/voices
+    # NUMA pinning needs CAP_SYS_NICE for sched_setaffinity. Without it the
+    # service still runs, it just loses locality (and says so at startup).
+    cap_add: [SYS_NICE]
+    command:
+      - serve
+      - --bundle=/models/bundle
+      - --tokenizer=/models/bundle/tokenizer.model
+      - --voices=/data/voices
+      - --port=8080
+      - --int8
+      # Stress is what the checkpoint was trained on; without the sidecar the
+      # same text scores 17.7% WER instead of 3.2%.
+      - --accent-url=http://accent:8100
+      # Nodes 0-2; node 3 belongs to the accent sidecar.
+      - --nodes=0,1,2
+    restart: unless-stopped
+    ulimits:
+      memlock: -1
+    networks: [xvibe]
+
+networks:
+  xvibe:

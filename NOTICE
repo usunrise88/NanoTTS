@@ -1,0 +1,37 @@
+# NOTICE
+
+## Код
+
+Этот проект — производная от [VolgaGerm/PocketTTS.cpp](https://github.com/VolgaGerm/PocketTTS.cpp)
+(MIT, Copyright (c) 2026 VolgaGerm). Взяты и переработаны: декомпозиция модели на пять ONNX-графов,
+схема ping-pong для состояний, split K/V кэш в fp16 и обход бага ORT со `ScatterElements`.
+Копирайт сохранён в `LICENSE`.
+
+Текстовый слой (нормализация, `prepare_text_prompt`, токенный чанкинг, AR-цикл с EOS) портирован
+с [kyutai-labs pocket-tts](https://pypi.org/project/pocket-tts/) 3.0.2, чтобы поведение совпадало
+с эталонным рантаймом.
+
+Зависимости: ONNX Runtime (MIT), SentencePiece (Apache-2.0), cpp-httplib (MIT),
+nlohmann/json (MIT), dr_libs (public domain / MIT), LAME (LGPL, линкуется динамически).
+
+## Веса модели
+
+`genvoice/xVibePocketTTS` на HuggingFace. **Поле license в карточке модели отсутствует**; указано
+лишь, что базовая модель Kyutai заявлена под CC BY 4.0. Веса в этот репозиторий не входят —
+`assets/weights/*.safetensors` в `.gitignore`, их надо скачать отдельно. Условия использования
+для продакшена следует уточнять у GenVoice.
+
+## Голоса
+
+`assets/voices/*.safetensors` и `bundle/male_deep.safetensors` — прогретые голосовые состояния из
+поставки GenVoice, распространяются здесь на тех же неопределённых условиях, что и веса.
+По их NOTICE `male_deep` — синтетический референс, сгенерированный самой моделью.
+
+Голоса, загруженные пользователями, и их исходные записи в репозиторий не входят: это записи
+живых людей. Сервер восстанавливает любой голос из WAV через `POST /v1/voices`.
+
+## Ударения
+
+[RUAccent](https://github.com/Den4ikAI/ruaccent) (Apache-2.0), ревизия
+`b78ae5ea1e62beaf138bed1865cd8c3b0b5ca855`, работает отдельным сайдкаром и в образ этого
+проекта не встраивается — собирается из `accent/Dockerfile`.

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>xVibeTTS</title>
+    <script>
+      // Applied before first paint so the shell never flashes the wrong theme.
+      try {
+        const t = localStorage.getItem('xvibe.theme') ?? 'system'
+        const dark = t === 'dark' || (t === 'system' &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+        document.documentElement.lang = localStorage.getItem('xvibe.lang') ?? 'ru'
+      } catch { /* private mode: fall through to the default */ }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

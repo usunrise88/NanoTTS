@@ -1,0 +1,440 @@
+{
+  "schema_version": 1,
+  "bundle_name": "xvibe-ru",
+  "sample_rate": 24000,
+  "frame_rate": 12.5,
+  "samples_per_frame": 1920,
+  "latent_dim": 32,
+  "conditioning_dim": 1024,
+  "num_layers": 6,
+  "num_heads": 16,
+  "dim_per_head": 64,
+  "max_seq": 512,
+  "mimi_cache_len": 250,
+  "rope_max_period": 10000.0,
+  "insert_bos_before_voice": true,
+  "vocab_size": 5000,
+  "pad_with_spaces_for_short_inputs": false,
+  "remove_semicolons": false,
+  "model_recommended_frames_after_eos": null,
+  "max_token_per_chunk": 50,
+  "defaults": {
+    "temperature": 0.5,
+    "eos_threshold": -4.0,
+    "lsd_steps": 1
+  },
+  "flow_lm_state": [
+    {
+      "name": "step",
+      "dtype": "int64",
+      "shape": [
+        "batch"
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_k_0",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_v_0",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_k_1",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_v_1",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_k_2",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_v_2",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_k_3",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_v_3",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_k_4",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_v_4",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_k_5",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "cache_v_5",
+      "dtype": "float16",
+      "shape": [
+        "batch",
+        512,
+        16,
+        64
+      ],
+      "fill": "zeros"
+    }
+  ],
+  "mimi_state": [
+    {
+      "name": "state_0",
+      "path": "decoder.model.0/first",
+      "dtype": "bool",
+      "shape": [
+        1
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_1",
+      "path": "decoder.model.0/previous",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512,
+        6
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_2",
+      "path": "decoder.model.11/first",
+      "dtype": "bool",
+      "shape": [
+        1
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_3",
+      "path": "decoder.model.11/previous",
+      "dtype": "float32",
+      "shape": [
+        1,
+        64,
+        2
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_4",
+      "path": "decoder.model.2/partial",
+      "dtype": "float32",
+      "shape": [
+        1,
+        256,
+        6
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_5",
+      "path": "decoder.model.3.block.1/first",
+      "dtype": "bool",
+      "shape": [
+        1
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_6",
+      "path": "decoder.model.3.block.1/previous",
+      "dtype": "float32",
+      "shape": [
+        1,
+        256,
+        2
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_7",
+      "path": "decoder.model.3.block.3/first",
+      "dtype": "bool",
+      "shape": [
+        1
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_8",
+      "path": "decoder.model.3.block.3/previous",
+      "dtype": "float32",
+      "shape": [
+        1,
+        128,
+        0
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_9",
+      "path": "decoder.model.5/partial",
+      "dtype": "float32",
+      "shape": [
+        1,
+        128,
+        5
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_10",
+      "path": "decoder.model.6.block.1/first",
+      "dtype": "bool",
+      "shape": [
+        1
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_11",
+      "path": "decoder.model.6.block.1/previous",
+      "dtype": "float32",
+      "shape": [
+        1,
+        128,
+        2
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_12",
+      "path": "decoder.model.6.block.3/first",
+      "dtype": "bool",
+      "shape": [
+        1
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_13",
+      "path": "decoder.model.6.block.3/previous",
+      "dtype": "float32",
+      "shape": [
+        1,
+        64,
+        0
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_14",
+      "path": "decoder.model.8/partial",
+      "dtype": "float32",
+      "shape": [
+        1,
+        64,
+        4
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_15",
+      "path": "decoder.model.9.block.1/first",
+      "dtype": "bool",
+      "shape": [
+        1
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_16",
+      "path": "decoder.model.9.block.1/previous",
+      "dtype": "float32",
+      "shape": [
+        1,
+        64,
+        2
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_17",
+      "path": "decoder.model.9.block.3/first",
+      "dtype": "bool",
+      "shape": [
+        1
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_18",
+      "path": "decoder.model.9.block.3/previous",
+      "dtype": "float32",
+      "shape": [
+        1,
+        32,
+        0
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_19",
+      "path": "decoder_transformer.transformer.layers.0.self_attn/cache_k",
+      "dtype": "float16",
+      "shape": [
+        1,
+        250,
+        8,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_20",
+      "path": "decoder_transformer.transformer.layers.0.self_attn/cache_v",
+      "dtype": "float16",
+      "shape": [
+        1,
+        250,
+        8,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_21",
+      "path": "decoder_transformer.transformer.layers.0.self_attn/offset",
+      "dtype": "int64",
+      "shape": [
+        1
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_22",
+      "path": "decoder_transformer.transformer.layers.1.self_attn/cache_k",
+      "dtype": "float16",
+      "shape": [
+        1,
+        250,
+        8,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_23",
+      "path": "decoder_transformer.transformer.layers.1.self_attn/cache_v",
+      "dtype": "float16",
+      "shape": [
+        1,
+        250,
+        8,
+        64
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_24",
+      "path": "decoder_transformer.transformer.layers.1.self_attn/offset",
+      "dtype": "int64",
+      "shape": [
+        1
+      ],
+      "fill": "zeros"
+    },
+    {
+      "name": "state_25",
+      "path": "upsample.convtr/partial",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512,
+        16
+      ],
+      "fill": "zeros"
+    }
+  ]
+}
