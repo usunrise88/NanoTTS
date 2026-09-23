@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 
-namespace xvibe {
+namespace nanotts {
 
 /** What the reference audio actually looks like.
  *
@@ -26,4 +26,4 @@ struct AudioReport {
 
 AudioReport analyse(const std::vector<float>& samples, int sample_rate);
 
-}  // namespace xvibe
+}  // namespace nanotts

@@ -16,7 +16,7 @@
 #include "http/web_assets.hpp"
 #include "httplib.h"
 
-namespace xvibe {
+namespace nanotts {
 namespace fs = std::filesystem;
 using nlohmann::json;
 using clock_t_ = std::chrono::steady_clock;
@@ -299,8 +299,10 @@ int Service::run() {
       sr.stream = body.value("stream", true);
       // Extra knobs live in their own object so an OpenAI client that does not
       // know about them keeps working.
-      if (body.contains("xvibe")) {
-        const auto& x = body.at("xvibe");
+      // `xvibe` is what this object was called before the project was renamed;
+      // it is still accepted so callers written against the old name keep working.
+      if (body.contains("nanotts") || body.contains("xvibe")) {
+        const auto& x = body.contains("nanotts") ? body.at("nanotts") : body.at("xvibe");
         sr.params.temperature = x.value("temperature", sr.params.temperature);
         sr.params.eos_threshold = x.value("eos_threshold", sr.params.eos_threshold);
         sr.params.lsd_steps = x.value("lsd_steps", sr.params.lsd_steps);
@@ -412,7 +414,7 @@ int Service::run() {
     json data = json::array();
     data.push_back({{"id", bundle_.dir.filename().string()},
                     {"object", "model"},
-                    {"owned_by", "xvibetts"}});
+                    {"owned_by", "nanotts"}});
     res.set_content(json{{"object", "list"}, {"data", data}}.dump(), "application/json");
   });
 
@@ -576,15 +578,15 @@ int Service::run() {
 
   srv.Get("/metrics", [&](const httplib::Request&, httplib::Response& res) {
     std::ostringstream os;
-    os << "# TYPE xvibe_requests_total counter\nxvibe_requests_total " << requests_.load() << "\n"
-       << "# TYPE xvibe_errors_total counter\nxvibe_errors_total " << errors_.load() << "\n"
-       << "# TYPE xvibe_queued gauge\nxvibe_queued " << queued_.load() << "\n"
-       << "# TYPE xvibe_audio_seconds_total counter\nxvibe_audio_seconds_total "
+    os << "# TYPE nanotts_requests_total counter\nnanotts_requests_total " << requests_.load() << "\n"
+       << "# TYPE nanotts_errors_total counter\nnanotts_errors_total " << errors_.load() << "\n"
+       << "# TYPE nanotts_queued gauge\nnanotts_queued " << queued_.load() << "\n"
+       << "# TYPE nanotts_audio_seconds_total counter\nnanotts_audio_seconds_total "
        << audio_seconds_.load() << "\n"
-       << "# TYPE xvibe_ttfb_ms histogram\n" << ttfb_ms_.prometheus("xvibe_ttfb_ms", "")
-       << "# TYPE xvibe_request_ms histogram\n" << total_ms_.prometheus("xvibe_request_ms", "");
+       << "# TYPE nanotts_ttfb_ms histogram\n" << ttfb_ms_.prometheus("nanotts_ttfb_ms", "")
+       << "# TYPE nanotts_request_ms histogram\n" << total_ms_.prometheus("nanotts_request_ms", "");
     for (size_t i = 0; i < workers_.size(); ++i)
-      os << "xvibe_worker_served_total{worker=\"" << i << "\",node=\"" << workers_[i]->node
+      os << "nanotts_worker_served_total{worker=\"" << i << "\",node=\"" << workers_[i]->node
          << "\"} " << workers_[i]->served.load() << "\n";
     res.set_content(os.str(), "text/plain; version=0.0.4");
   });
@@ -646,4 +648,4 @@ int Service::run() {
   return 0;
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

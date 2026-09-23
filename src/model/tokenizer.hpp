@@ -8,7 +8,7 @@ namespace sentencepiece {
 class SentencePieceProcessor;
 }
 
-namespace xvibe {
+namespace nanotts {
 
 // Google SentencePiece, used directly rather than reimplemented: the Russian
 // model carries U+0301 as a dedicated piece (id 3) and the chunker depends on
@@ -26,4 +26,4 @@ class Tokenizer {
   std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_;
 };
 
-}  // namespace xvibe
+}  // namespace nanotts

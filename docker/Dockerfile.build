@@ -1,4 +1,4 @@
-# Build environment for the xVibeTTS C++ runtime.
+# Build environment for the NanoTTS C++ runtime.
 FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

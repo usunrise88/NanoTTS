@@ -1,5 +1,7 @@
 #include "voice/store.hpp"
 
+#include <cstdio>
+
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -9,7 +11,7 @@
 
 #include "voice/safetensors.hpp"
 
-namespace xvibe {
+namespace nanotts {
 namespace fs = std::filesystem;
 
 namespace {
@@ -59,8 +61,12 @@ std::vector<VoiceInfo> VoiceStore::list() const {
           break;
         }
       }
-    } catch (...) {
-      continue;  // not a voice file we understand; skip rather than fail the listing
+    } catch (const std::exception& err) {
+      // Skipping keeps one bad file from emptying the catalogue, but a silent
+      // skip is worse: a voice directory the server cannot read looks exactly
+      // like an empty one, and the operator has no way to tell which.
+      std::fprintf(stderr, "voice %s ignored: %s\n", v.id.c_str(), err.what());
+      continue;
     }
     out.push_back(std::move(v));
   }
@@ -105,4 +111,4 @@ std::string VoiceStore::reference_report(const std::string& id) const {
   return os.str();
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

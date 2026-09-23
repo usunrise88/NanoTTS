@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage-0 verification for the xVibe ONNX export.
+"""Stage-0 verification for the NanoTTS ONNX export.
 
 Three questions, in order of how badly a failure would hurt:
 
@@ -17,7 +17,7 @@ import torch
 from pocket_tts.models.tts_model import TTSModel
 from pocket_tts.modules.stateful_module import init_states, increment_steps
 
-from export_xvibe import FlowLMMainWrapper
+from export_nanotts import FlowLMMainWrapper
 
 MAX_SEQ = 512
 torch.manual_seed(0)

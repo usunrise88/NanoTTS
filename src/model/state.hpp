@@ -7,7 +7,7 @@
 #include "numa/affinity.hpp"
 #include "onnxruntime_cxx_api.h"
 
-namespace xvibe {
+namespace nanotts {
 
 // Recurrent state for one graph, held as raw bytes the runtime owns.
 //
@@ -52,4 +52,4 @@ class StateBuffers {
 
 ONNXTensorElementDataType onnx_type_of(const std::string& dtype);
 
-}  // namespace xvibe
+}  // namespace nanotts

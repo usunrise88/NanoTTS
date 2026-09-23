@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace xvibe {
+namespace nanotts {
 
 struct AudioBuffer {
   std::vector<float> samples;  // mono
@@ -20,4 +20,4 @@ std::string wav_header(int sample_rate, uint32_t data_bytes);
 std::vector<uint8_t> wav_encode_pcm16(const std::vector<float>& samples, int sample_rate);
 void wav_write(const std::filesystem::path& p, const std::vector<float>& samples, int sample_rate);
 
-}  // namespace xvibe
+}  // namespace nanotts

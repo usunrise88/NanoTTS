@@ -4,7 +4,7 @@
 
 #include <stdexcept>
 
-namespace xvibe {
+namespace nanotts {
 
 Tokenizer::Tokenizer(const std::filesystem::path& model_path)
     : sp_(std::make_unique<sentencepiece::SentencePieceProcessor>()) {
@@ -30,4 +30,4 @@ std::string Tokenizer::decode(const std::vector<int>& ids) const {
 
 int Tokenizer::vocab_size() const { return sp_->GetPieceSize(); }
 
-}  // namespace xvibe
+}  // namespace nanotts

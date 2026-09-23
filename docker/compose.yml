@@ -2,7 +2,7 @@ services:
   accent:
     build:
       context: ../accent
-    image: xvibe-accent:latest
+    image: nanotts-accent:latest
     # Models are baked into the image, so this starts without network access.
     # Given its own NUMA node: sharing cores with the synth cost ~180 ms of TTFB.
     cpuset: "12-15,28-31"
@@ -12,13 +12,13 @@ services:
       RUACCENT_POOL: "3"
       RUACCENT_THREADS: "4"
     restart: unless-stopped
-    networks: [xvibe]
+    networks: [nanotts]
 
-  xvibe-tts:
+  nanotts:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: xvibe-tts:latest
+    image: nanotts:latest
     depends_on: [accent]
     ports: ["8080:8080"]
     volumes:
@@ -42,7 +42,7 @@ services:
     restart: unless-stopped
     ulimits:
       memlock: -1
-    networks: [xvibe]
+    networks: [nanotts]
 
 networks:
-  xvibe:
+  nanotts:

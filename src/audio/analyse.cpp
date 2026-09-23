@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace xvibe {
+namespace nanotts {
 namespace {
 
 std::string fixed(double v, int digits) {
@@ -86,4 +86,4 @@ AudioReport analyse(const std::vector<float>& samples, int sample_rate) {
   return r;
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

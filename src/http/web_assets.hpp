@@ -2,7 +2,7 @@
 #include <span>
 #include <string_view>
 
-namespace xvibe {
+namespace nanotts {
 
 // One file from the built console, compiled into the binary.
 struct WebAsset {
@@ -11,8 +11,8 @@ struct WebAsset {
   std::string_view body;
 };
 
-// Empty when the build was configured with -DXVIBE_EMBED_WEB=OFF, in which
+// Empty when the build was configured with -DNANOTTS_EMBED_WEB=OFF, in which
 // case the server falls back to serving a directory given by --web.
 std::span<const WebAsset> embedded_web();
 
-}  // namespace xvibe
+}  // namespace nanotts

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace xvibe {
+namespace nanotts {
 
 struct VoiceInfo {
   std::string id;
@@ -41,4 +41,4 @@ class VoiceStore {
   mutable std::mutex mu_;
 };
 
-}  // namespace xvibe
+}  // namespace nanotts

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reference ONNX runtime for the xVibe bundle.
+"""Reference ONNX runtime for the NanoTTS bundle.
 
 This exists to pin down behaviour before any of it is written in C++: the AR
 loop, the LSD solver, voice warm-up, the text pipeline and the state layout are

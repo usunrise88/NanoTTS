@@ -3,7 +3,7 @@
 #include <cmath>
 #include <numeric>
 
-namespace xvibe {
+namespace nanotts {
 namespace {
 
 double bessel_i0(double x) {
@@ -70,4 +70,4 @@ std::vector<float> resample(const std::vector<float>& in, int from_rate, int to_
   return out;
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

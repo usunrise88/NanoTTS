@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace xvibe {
+namespace nanotts {
 
 struct StTensor {
   std::string dtype;            // F32 | F16 | I64 | BOOL, as safetensors spells it
@@ -18,4 +18,4 @@ void st_save(const std::filesystem::path& p,
              const std::vector<std::pair<std::string, StTensor>>& tensors,
              const std::vector<std::pair<std::string, std::string>>& metadata = {});
 
-}  // namespace xvibe
+}  // namespace nanotts

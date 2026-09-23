@@ -12,7 +12,7 @@
 #include "text/accent.hpp"
 #include "voice/store.hpp"
 
-namespace xvibe {
+namespace nanotts {
 
 struct ServerConfig {
   std::string host = "0.0.0.0";
@@ -102,4 +102,4 @@ class Service {
   std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace xvibe
+}  // namespace nanotts

@@ -15,7 +15,7 @@
 #include "text/text.hpp"
 #include "voice/safetensors.hpp"
 
-namespace xvibe {
+namespace nanotts {
 namespace fs = std::filesystem;
 
 namespace {
@@ -129,7 +129,7 @@ void Engine::init_sessions() {
   if (!cfg_.cpus.empty()) pin_thread(cfg_.cpus);
   const bool bound = cfg_.numa_node >= 0 && bind_memory_to_node(cfg_.numa_node);
 
-  env_ = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "xvibe");
+  env_ = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "nanotts");
   mem_ = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
   const std::string aff = affinity_string(cfg_.cpus, cfg_.threads);
@@ -707,4 +707,4 @@ void Engine::generate(const std::string& text, const VoiceState& voice, const Ge
   if (!err.empty()) throw std::runtime_error("mimi decode failed: " + err);
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

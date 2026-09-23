@@ -3,7 +3,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace xvibe {
+namespace nanotts {
 
 ONNXTensorElementDataType onnx_type_of(const std::string& dtype) {
   if (dtype == "float32") return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
@@ -78,4 +78,4 @@ void StateBuffers::load_slot(int64_t slot, const StateBuffers& src, int64_t src_
   }
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

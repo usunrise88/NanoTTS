@@ -14,7 +14,7 @@
 #include "text/text.hpp"
 
 namespace fs = std::filesystem;
-using namespace xvibe;
+using namespace nanotts;
 
 namespace {
 
@@ -52,14 +52,14 @@ struct Args {
 
 [[noreturn]] void usage() {
   std::cerr <<
-      R"(xvibe-tts - CPU inference for xVibePocketTTS
+      R"(nanotts - CPU inference for xVibePocketTTS
 
-  xvibe-tts info      --bundle DIR
-  xvibe-tts topology
-  xvibe-tts generate  --bundle DIR --tokenizer FILE --voice FILE --text STR [--output WAV]
-  xvibe-tts warm      --bundle DIR --tokenizer FILE --input REF.wav --output VOICE.safetensors
-  xvibe-tts import    --bundle DIR --tokenizer FILE --input UPSTREAM.safetensors --output VOICE.safetensors
-  xvibe-tts serve     --bundle DIR --tokenizer FILE --voices DIR [--port N] [--nodes 0,1]
+  nanotts info      --bundle DIR
+  nanotts topology
+  nanotts generate  --bundle DIR --tokenizer FILE --voice FILE --text STR [--output WAV]
+  nanotts warm      --bundle DIR --tokenizer FILE --input REF.wav --output VOICE.safetensors
+  nanotts import    --bundle DIR --tokenizer FILE --input UPSTREAM.safetensors --output VOICE.safetensors
+  nanotts serve     --bundle DIR --tokenizer FILE --voices DIR [--port N] [--nodes 0,1]
 
 Options:
   --int8              use quantised graphs where available
@@ -92,12 +92,31 @@ Args parse(int argc, char** argv) {
   if (argc < 2) usage();
   Args a;
   a.command = argv[1];
+
+  // Both `--flag value` and `--flag=value` are accepted. Compose files and
+  // systemd units are written the second way often enough that supporting only
+  // the first is a trap: the binary just prints its usage and exits 2.
+  std::string inline_value;
+  bool have_inline = false;
   auto need = [&](int& i) -> std::string {
+    if (have_inline) {
+      have_inline = false;
+      return inline_value;
+    }
     if (++i >= argc) usage();
     return argv[i];
   };
   for (int i = 2; i < argc; ++i) {
-    const std::string k = argv[i];
+    std::string k = argv[i];
+    have_inline = false;
+    if (k.rfind("--", 0) == 0) {
+      const auto eq = k.find('=');
+      if (eq != std::string::npos) {
+        inline_value = k.substr(eq + 1);
+        have_inline = true;
+        k = k.substr(0, eq);
+      }
+    }
     if (k == "--bundle") a.bundle = need(i);
     else if (k == "--tokenizer") a.tokenizer = need(i);
     else if (k == "--voice") a.voice = need(i);

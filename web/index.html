@@ -3,15 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>xVibeTTS</title>
+    <title>NanoTTS</title>
     <script>
       // Applied before first paint so the shell never flashes the wrong theme.
       try {
-        const t = localStorage.getItem('xvibe.theme') ?? 'system'
+        const t = localStorage.getItem('nanotts.theme') ?? 'system'
         const dark = t === 'dark' || (t === 'system' &&
           window.matchMedia('(prefers-color-scheme: dark)').matches)
         document.documentElement.classList.toggle('dark', dark)
-        document.documentElement.lang = localStorage.getItem('xvibe.lang') ?? 'ru'
+        document.documentElement.lang = localStorage.getItem('nanotts.lang') ?? 'ru'
       } catch { /* private mode: fall through to the default */ }
     </script>
   </head>

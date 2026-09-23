@@ -1,7 +1,7 @@
 #include "http/web_assets.hpp"
 
-namespace xvibe {
+namespace nanotts {
 
 std::span<const WebAsset> embedded_web() { return {}; }
 
-}  // namespace xvibe
+}  // namespace nanotts

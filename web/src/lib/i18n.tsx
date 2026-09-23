@@ -199,12 +199,12 @@ const I18nContext = createContext<I18nValue | null>(null)
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(
-    () => (safeLocal('xvibe.lang', 'ru') as Locale) ?? 'ru',
+    () => (safeLocal('nanotts.lang', 'ru') as Locale) ?? 'ru',
   )
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next)
-    storeLocal('xvibe.lang', next)
+    storeLocal('nanotts.lang', next)
     document.documentElement.lang = next
   }, [])
 

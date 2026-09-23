@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load and quality harness for the xVibeTTS server.
+"""Load and quality harness for the NanoTTS server.
 
 Measures what actually matters in production: TTFB and RTF percentiles *under
 concurrency*, not a median of five runs on an idle box. Optionally transcribes
@@ -92,7 +92,7 @@ def wav_seconds(data: bytes) -> float:
 
 
 def transcribe(asr_url: str, key: str, model: str, wav: bytes, timeout: float) -> str:
-    boundary = "----xvibebench"
+    boundary = "----nanottsbench"
     parts = []
     parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n{model}\r\n")
     parts.append(
@@ -145,7 +145,7 @@ def main():
     def run(job):
         idx, text = job
         payload = {"input": text, "voice": args.voice, "response_format": "wav",
-                   "xvibe": {"seed": args.seed + idx if args.seed else 0}}
+                   "nanotts": {"seed": args.seed + idx if args.seed else 0}}
         try:
             data, ttfb, total = post_json(endpoint, payload, args.api_key, args.timeout)
             return {"idx": idx, "text": text, "wav": data, "ttfb": ttfb, "total": total,

@@ -6,7 +6,7 @@ export const apiBase = () => window.location.pathname.replace(/[^/]*$/, '')
 
 export const apiUrl = (path: string) => apiBase() + path
 
-export const KEY_STORAGE = 'xvibe.key'
+export const KEY_STORAGE = 'nanotts.key'
 
 export class ApiError extends Error {
   constructor(
@@ -131,7 +131,7 @@ export async function synthesize(options: SpeechOptions): Promise<SpeechResult> 
   const response = await apiFetch('v1/audio/speech', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input, voice, response_format, xvibe: rest }),
+    body: JSON.stringify({ input, voice, response_format, nanotts: rest }),
   })
 
   const reader = response.body?.getReader()

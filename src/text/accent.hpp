@@ -6,7 +6,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace xvibe {
+namespace nanotts {
 
 /** Client for the RUAccent sidecar.
  *
@@ -56,4 +56,4 @@ class Accentuator {
   Stats stats_;
 };
 
-}  // namespace xvibe
+}  // namespace nanotts

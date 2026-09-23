@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 
-namespace xvibe {
+namespace nanotts {
 
 struct NumaNode {
   int id = 0;
@@ -23,4 +23,4 @@ struct Topology {
 // Parse a Linux cpulist such as "0-3,16-19".
 std::vector<int> parse_cpulist(const std::string& s);
 
-}  // namespace xvibe
+}  // namespace nanotts

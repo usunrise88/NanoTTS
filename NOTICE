@@ -9,12 +9,16 @@
 
 Текстовый слой (нормализация, `prepare_text_prompt`, токенный чанкинг, AR-цикл с EOS) портирован
 с [kyutai-labs pocket-tts](https://pypi.org/project/pocket-tts/) 3.0.2, чтобы поведение совпадало
-с эталонным рантаймом.
+с эталонным рантаймом. Экспорт идёт через `TTSModel.load_model`, поэтому работает и с базовыми
+чекпоинтами [kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts), и с их файн-тюнами.
 
 Зависимости: ONNX Runtime (MIT), SentencePiece (Apache-2.0), cpp-httplib (MIT),
 nlohmann/json (MIT), dr_libs (public domain / MIT), LAME (LGPL, линкуется динамически).
 
 ## Веса модели
+
+Веса Pocket TTS принадлежат Kyutai и заявлены под CC BY 4.0.
+Для файн-тюнов условия задаёт их автор — ниже про тот, что стоит здесь по умолчанию.
 
 `genvoice/xVibePocketTTS` на HuggingFace. **Поле license в карточке модели отсутствует**; указано
 лишь, что базовая модель Kyutai заявлена под CC BY 4.0. Веса в этот репозиторий не входят —

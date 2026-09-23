@@ -7,12 +7,12 @@
 #include <cstring>
 #include <new>
 
-#if XVIBE_HAVE_NUMA
+#if NANOTTS_HAVE_NUMA
 #include <numa.h>
 #include <numaif.h>
 #endif
 
-namespace xvibe {
+namespace nanotts {
 
 namespace {
 constexpr size_t kHugePageThreshold = 2u << 20;  // ask for THP above 2 MiB
@@ -20,7 +20,7 @@ constexpr size_t kHugePageThreshold = 2u << 20;  // ask for THP above 2 MiB
 
 NumaBuffer::NumaBuffer(size_t bytes, int node) : size_(bytes) {
   if (bytes == 0) return;
-#if XVIBE_HAVE_NUMA
+#if NANOTTS_HAVE_NUMA
   if (node >= 0 && numa_available() != -1) {
     data_ = static_cast<uint8_t*>(numa_alloc_onnode(bytes, node));
     numa_owned_ = data_ != nullptr;
@@ -39,7 +39,7 @@ NumaBuffer::NumaBuffer(size_t bytes, int node) : size_(bytes) {
 
 void NumaBuffer::release() {
   if (!data_) return;
-#if XVIBE_HAVE_NUMA
+#if NANOTTS_HAVE_NUMA
   if (numa_owned_) {
     numa_free(data_, size_);
     data_ = nullptr;
@@ -85,7 +85,7 @@ bool pin_thread(const std::vector<int>& cpus) {
 }
 
 bool bind_memory_to_node(int node) {
-#if XVIBE_HAVE_NUMA
+#if NANOTTS_HAVE_NUMA
   if (node < 0 || numa_available() == -1) return false;
   // First-touch allocation follows the calling thread's policy, so setting it
   // before the ORT session is created is what puts the weights on this node.
@@ -98,17 +98,17 @@ bool bind_memory_to_node(int node) {
 }
 
 void unbind_memory() {
-#if XVIBE_HAVE_NUMA
+#if NANOTTS_HAVE_NUMA
   set_mempolicy(MPOL_DEFAULT, nullptr, 0);
 #endif
 }
 
 bool numa_available_here() {
-#if XVIBE_HAVE_NUMA
+#if NANOTTS_HAVE_NUMA
   return numa_available() != -1;
 #else
   return false;
 #endif
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

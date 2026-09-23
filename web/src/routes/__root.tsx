@@ -40,7 +40,7 @@ function Shell() {
       <div className="sticky top-0 z-30 border-b border-border bg-bg">
         <div className="mx-auto flex w-full max-w-[1120px] flex-wrap items-center gap-3 px-4 py-2.5">
           <div className="flex items-baseline gap-2">
-            <span className="text-sm font-semibold tracking-tight">xVibeTTS</span>
+            <span className="text-sm font-semibold tracking-tight">NanoTTS</span>
             <span className="hidden text-xs text-faint sm:inline">{t('app.subtitle')}</span>
           </div>
           <span className="mx-1 hidden h-4 w-px bg-border sm:block" />

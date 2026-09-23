@@ -1,137 +1,195 @@
-# xVibeTTS
+**English** · [Русский](README.ru.md)
 
-Продакшен-инференс русского синтеза речи [genvoice/xVibePocketTTS](https://huggingface.co/genvoice/xVibePocketTTS)
-на CPU. Производная от [VolgaGerm/PocketTTS.cpp](https://github.com/VolgaGerm/PocketTTS.cpp) (MIT),
-переписанная под многопоточное обслуживание, NUMA-локальность и OpenAI-совместимый HTTP API.
+# NanoTTS
 
-## Что внутри
+A production CPU inference server for [Kyutai **Pocket TTS**](https://huggingface.co/kyutai/pocket-tts)
+and its fine-tunes. Derived from [VolgaGerm/PocketTTS.cpp](https://github.com/VolgaGerm/PocketTTS.cpp)
+(MIT) and rewritten for multi-threaded serving, NUMA locality and an
+OpenAI-compatible HTTP API.
 
-- **Ударения** через сайдкар RUAccent — без них та же модель даёт 17.7% WER вместо 3.2%.
-- **HTTP-сервер** с эндпоинтом `/v1/audio/speech`, потоковой отдачей (chunked), форматами `wav` / `pcm` / `mp3`.
-- **Веб-интерфейс** для проверки: синтез, загрузка и прогрев своих голосов в `.safetensors`, мониторинг.
-- **NUMA-раскладка**: по воркеру на ноду, веса реплицированы, потоки запинены, память аллоцируется локально.
-- **Прогретые голоса**: KV-кэш FlowLM, сохранённый на диск. Запрос стартует с `memcpy`, а не с префилла.
-- **Экспорт** модели в пять ONNX-графов с dynamic batch и per-row позициями.
-
-## Быстрый старт
+Pocket TTS is small enough to be genuinely fast on a CPU — six transformer layers
+over a 12.5 Hz Mimi codec — and this is what it takes to serve it: warmed voices
+that start from a `memcpy`, five stateless ONNX graphs, weights replicated per
+NUMA node, and streaming from the first frame.
 
 ```bash
-# 1. Экспорт модели в ONNX (один раз)
-docker build -t xvibe-export tools/export
-docker run --rm -e POCKET_TTS_NO_BEARTYPE=1 \
-  -v $PWD/assets:/assets:ro -v $PWD/tools/export:/work -v $PWD/bundle:/out -w /work \
-  xvibe-export python export_xvibe.py
-docker run --rm -v $PWD/tools/export:/work -v $PWD/bundle:/out -w /work \
-  xvibe-export python quantize.py          # int8-варианты двух LM-графов
-
-# 2. Сервис
-cd docker && docker compose up --build
-# веб-интерфейс: http://localhost:8080
+curl -fsSL https://raw.githubusercontent.com/usunrise88/NanoTTS/main/install.sh | bash
 ```
+
+## Install
+
+The one-liner fetches the source, exports the checkpoint to ONNX, builds the
+runtime image and starts it on `127.0.0.1:8080`. Everything runs in Docker; the
+only things it puts on the host are one directory and a `nanotts` launcher.
+
+```bash
+# a Pocket TTS base language instead of the default Russian fine-tune
+curl -fsSL .../install.sh | bash -s -- --model english
+
+# expose it, pick a port, stay in fp32
+curl -fsSL .../install.sh | bash -s -- --bind 0.0.0.0 --port 9000 --precision fp32
+
+curl -fsSL .../install.sh | bash -s -- update
+curl -fsSL .../install.sh | bash -s -- uninstall           # keeps warmed voices
+curl -fsSL .../install.sh | bash -s -- uninstall --purge    # removes them too
+```
+
+Afterwards: `nanotts start | stop | restart | status | logs | update | uninstall`.
+
+Requirements: Linux on x86_64 (AVX2 strongly preferred), Docker with Compose v2,
+git, and about 12 GiB of disk for the export.
+
+## Models
+
+Anything the `pocket-tts` package can load, because the exporter goes through
+`TTSModel.load_model`:
+
+| `--model` | What it is |
+|---|---|
+| `english`, `english_2026-04`, `english_2026-04_24l` | Kyutai base, English |
+| `french_24l`, `german`, `german_24l`, `italian`, `italian_24l` | Kyutai base |
+| `portuguese`, `portuguese_24l`, `spanish`, `spanish_24l` | Kyutai base |
+| `genvoice/xVibePocketTTS` | Russian fine-tune — the default |
+| `owner/name` | any HuggingFace repo holding a `config.yaml` |
+| `hf://…`, `https://…`, `/path/to/config.yaml` | passed straight through |
+
+The runtime reads its geometry from the exported manifest — layer count, heads,
+latent dim, frame rate — so the 24-layer variants work exactly like the 6-layer
+ones.
+
+**Everything measured below was measured on the Russian fine-tune.** The other
+checkpoints go through the same code and export cleanly, but their numbers are
+not ours to quote.
+
+## What's in it
+
+- **HTTP server** with `/v1/audio/speech`, chunked streaming, `wav` / `pcm` / `mp3`.
+- **Web console** for trying it: synthesis, uploading and warming your own voices
+  into `.safetensors`, live monitoring. Compiled into the binary.
+- **NUMA placement**: one engine per node, weights replicated, threads pinned,
+  memory bound locally.
+- **Warmed voices** as saved FlowLM KV caches. A request starts with a `memcpy`
+  instead of a prefill.
+- **Stress marks** through a RUAccent sidecar for Russian, where the checkpoint
+  was trained on text carrying U+0301 and synthesising without it costs 17.7% WER
+  against 3.2%.
+- **Export** into five ONNX graphs with a dynamic batch axis and per-row positions.
 
 ## API
 
-| Метод | Путь | Назначение |
+| Method | Path | Purpose |
 |---|---|---|
-| POST | `/v1/audio/speech` | синтез; `input`, `voice`, `response_format`, объект `xvibe` с доп. параметрами |
-| GET | `/v1/models`, `/v1/voices` | каталоги |
-| POST | `/v1/voices` | multipart `id` + `file` (WAV) → прогрев → `.safetensors` |
-| GET | `/v1/voices/{id}/state` | скачать прогретое состояние |
-| DELETE | `/v1/voices/{id}` | удалить голос |
-| GET | `/healthz`, `/readyz`, `/stats`, `/metrics` | эксплуатация |
+| POST | `/v1/audio/speech` | synthesis; `input`, `voice`, `response_format`, plus a `nanotts` object for the extra knobs |
+| GET | `/v1/models`, `/v1/voices` | catalogues |
+| POST | `/v1/voices` | multipart `id` + `file` (WAV) → warm-up → `.safetensors` |
+| GET | `/v1/voices/{id}/state` | download the warmed state |
+| DELETE | `/v1/voices/{id}` | remove a voice |
+| GET | `/healthz`, `/readyz`, `/stats`, `/metrics` | operations |
 
 ```bash
 curl -X POST localhost:8080/v1/audio/speech -H 'Content-Type: application/json' -d '{
   "input": "Ст+арый з+амок сто+ит д+орого, а дв+ерь закрыв+ает зам+ок.",
   "voice": "male_deep",
   "response_format": "wav",
-  "xvibe": {"temperature": 0.5, "eos_threshold": -4.0, "seed": 42}
+  "nanotts": {"temperature": 0.5, "eos_threshold": -4.0, "seed": 42}
 }' --output out.wav
 ```
 
-## Ударения
+The extras sit in their own object so an OpenAI client that knows nothing about
+them keeps working. `xvibe` is accepted there as an alias for `nanotts`, because
+that is what the object was called before the project was renamed.
 
-Чекпоинт обучен на тексте с U+0301, и без ударений качество рушится. Измерено на одних сидах
-с прогоном через ASR:
+## EOS threshold
 
-| набор | без ударений | RUAccent | ручные ударения |
-|---|---|---|---|
-| длинные фразы (8) | WER 17.74% | **3.23%** | 3.23% |
-| обычный набор (20) | WER 20.50% | **6.21%** | 9.32% |
+The default is **−4.0**, which is `pocket-tts`'s own. GenVoice's model card
+quotes `EOS −1` as a condition of their benchmark, and taking that as a serving
+default proved expensive: at −1.0 the model regularly reads the text and then
+keeps going, inventing several seconds of speech. Measured on matched seeds:
 
-RUAccent обыгрывает и ручную разметку. Он живёт отдельным сайдкаром (`accent/`), потому что
-это Python без нативного порта; модели вшиты в образ, так что старт не требует сети.
-Подключается флагом `--accent-url`; без него сервер ударения не ставит и ждёт их от клиента.
-
-Цена — задержка: TTFB 171 → ~300 мс p50 на обычной прозе, до ~650 мс на тексте, насыщенном
-омографами (там работает модель их разрешения). Распределение бимодальное: обычное предложение
-размечается за 30–60 мс, предложение с омографом — около 600 мс, потому что включается модель
-разрешения. Смягчается кэшем по тексту, четырьмя ONNX-потоками на экземпляр (медиана 102 → 59 мс)
-и тем, что сайдкару отдана собственная NUMA-нода: без изоляции он отнимал ещё около 180 мс.
-
-На критическом пути размечается только столько текста, сколько нужно первому чанку. Разрез идёт
-**по границам предложений**, а чанкинг — уже после разметки, поэтому границы чанков те же, что
-были бы без конвейеризации. Обратный порядок (сначала чанкинг, потом разметка кусков) дешевле,
-но неверен: бюджет токенов пришлось бы занижать под будущие U+0301, а это ломает длинные
-предложения по запятым там, где модель прочитала бы их слитно.
-
-Ручные ударения всегда в приоритете: `+` перед гласной или U+0301 после неё. Такие слова
-подменяются плейсхолдерами перед вызовом RUAccent и возвращаются как есть. Избыточные метки
-с «ё» снимаются, а `+` остаётся литералом там, где за ним не русская гласная (`C++`, `2+2`
-не ломаются). Отключить на запрос — `"xvibe": {"auto_accent": false}`.
-
-## Порог EOS
-
-Дефолт — **−4.0**, как в самой `pocket-tts`. На карточке GenVoice `EOS −1` указан как условие их
-бенчмарка, и взять это значение за рабочий дефолт оказалось дорого: при −1.0 модель регулярно
-дочитывает текст и продолжает говорить отсебятину несколько секунд. Измерено на одних сидах:
-
-| набор | −1.0 | −4.0 |
+| set | −1.0 | −4.0 |
 |---|---|---|
-| короткие фразы (20) | WER 5.59% / CER 1.60% | 6.21% / 1.70% |
-| длинные фразы (8) | 5.65% / 2.14% | **4.84% / 2.03%** |
-| длинный абзац, 6 сидов | 16.20% / 9.68% | **9.72% / 2.94%** |
+| short phrases (20) | WER 5.59% / CER 1.60% | 6.21% / 1.70% |
+| long phrases (8) | 5.65% / 2.14% | **4.84% / 2.03%** |
+| long paragraph, 6 seeds | 16.20% / 9.68% | **9.72% / 2.94%** |
 
-Проседание на коротком наборе — одна фраза из двадцати, четыре из пяти ошибок совпадают между
-порогами; концовки при −4.0 не обрываются. Падение CER втрое на длинном абзаце — это ровно
-исчезнувший хвост отсебятины.
+The regression on the short set is one utterance out of twenty — four of its five
+errors are identical under both thresholds, and none is a truncated ending. The
+threefold CER drop on the paragraph is exactly the invented tail going away.
 
-Сверх порога длина генерации чанка ограничена как в апстриме — `ceil((токенов/3 + 2) × 12.5)`
-кадров. Без этого пропущенный EOS болтал до `max_frames`, то есть до сорока секунд.
+Beyond the threshold, a chunk's generation is capped the way upstream does it, at
+`ceil((tokens/3 + 2) × 12.5)` frames. Without that, a missed EOS ran to
+`max_frames` — forty seconds of whatever it felt like.
+
+## Stress marks (Russian)
+
+The checkpoint was trained on text carrying U+0301 and falls apart without it.
+Measured on matched seeds, transcribed through ASR:
+
+| set | no stress | RUAccent | hand-written |
+|---|---|---|---|
+| long phrases (8) | WER 17.74% | **3.23%** | 3.23% |
+| ordinary set (20) | WER 20.50% | **6.21%** | 9.32% |
+
+RUAccent beats hand-written marks too. It lives in its own sidecar (`accent/`)
+because it is Python with no native port; the models are baked into the image, so
+it starts without network access. Wire it up with `--accent-url`; without it the
+server places no stress and expects the caller to.
+
+The price is latency: TTFB 171 → ~300 ms p50 on ordinary prose, up to ~650 ms on
+text dense with homographs. The distribution is bimodal — an ordinary sentence is
+marked in 30–60 ms, a sentence containing a homograph costs about 600 ms because
+the resolver model runs. Softened by a text cache, by four ONNX threads per
+instance (median 102 → 59 ms), and by giving the sidecar its own NUMA node,
+without which it cost another 180 ms.
+
+Only as much text as the first chunk needs is marked on the critical path. The
+cut is **on a sentence boundary** and chunking happens after marking, so the
+chunk boundaries are the ones the unsplit text would have produced. The reverse
+order — chunk first, then mark the pieces — is cheaper and wrong: the token
+budget would have to be guessed down to leave room for the stress marks, which
+breaks long sentences at commas the model would rather have read through.
+
+Hand-written stress always wins: `+` before a vowel, or U+0301 after one. Those
+words are swapped for placeholders before the sidecar sees them and put back
+afterwards. Redundant marks on `ё` are dropped, and `+` stays literal where no
+Russian vowel follows, so `C++` and `2+2` survive. Per request:
+`"nanotts": {"auto_accent": false}`.
 
 ## NUMA
 
-Базовая машина — EPYC 7351P: один сокет, но **четыре NUMA-ноды** по 4 ядра и 32 ГБ, и восемь
-CCX по 8 МБ L3. Удалённое обращение стоит 16 против 10 локального, поэтому веса реплицируются
-по нодам (int8-бандл ~110 МБ, четыре копии — 440 МБ из 128 ГБ), а не шарятся.
+The reference machine is an EPYC 7351P: one socket, but **four NUMA nodes** of
+four cores and 32 GB, and eight CCXs with 8 MB of L3 each. A remote access costs
+16 against 10 local, so weights are replicated per node — an int8 bundle is
+~110 MB, four copies is 440 MB out of 128 GB — rather than shared.
 
 ```
---nodes 0,1,2,3        какие ноды занять (по умолчанию все)
---workers-per-node N   несколько движков на ноду; ядра делятся между ними
---threads N            intra-op потоков на движок (по умолчанию — физических ядер)
---smt                  использовать и SMT-сиблинги
---no-pin               без пиннинга и привязки памяти (для контейнеров без CAP_SYS_NICE)
+--nodes 0,1,2,3        which nodes to occupy (default: all)
+--workers-per-node N   several engines per node; cores are divided between them
+--threads N            intra-op threads per engine (default: physical cores)
+--smt                  use SMT siblings as well
+--no-pin               no pinning or memory binding (containers without CAP_SYS_NICE)
 ```
 
-Порядок важен: поток-создатель сначала пинится и переключает политику памяти на `MPOL_BIND`,
-и только потом создаются сессии ORT — иначе first-touch разложит веса не туда.
-Потоки ORT привязываются через `session.intra_op_thread_affinities`.
+Order matters: the creating thread pins itself and switches its memory policy to
+`MPOL_BIND` first, and only then are the ORT sessions built — otherwise
+first-touch puts the weights on the wrong node. ORT's own threads are pinned
+through `session.intra_op_thread_affinities`.
 
-`xvibe-tts topology` печатает обнаруженную раскладку.
+`nanotts topology` prints the layout it detected.
 
-## Замеры
+## Numbers
 
-EPYC 7351P, один воркер на ноду, int8, 20 фраз, governor `schedutil`:
+EPYC 7351P, one worker per node, int8, 20 phrases, `schedutil` governor:
 
-| Конкурентность | Пропускная способность | TTFB p50 | TTFB p95 | RTF p50 |
+| Concurrency | Throughput | TTFB p50 | TTFB p95 | RTF p50 |
 |---|---|---|---|---|
-| 1 | 4.03× realtime | 171 мс | 192 мс | 0.251 |
-| 4 | 9.02× realtime | 268 мс | 374 мс | 0.423 |
-| 8 | 8.94× realtime | 2029 мс | 2723 мс | 0.848 |
+| 1 | 4.03× realtime | 171 ms | 192 ms | 0.251 |
+| 4 | 9.02× realtime | 268 ms | 374 ms | 0.423 |
+| 8 | 8.94× realtime | 2029 ms | 2723 ms | 0.848 |
 
-Насыщение наступает на числе одновременных запросов, равном числу воркеров: сверх этого
-запросы встают в очередь. Снять этот потолок должен континуальный батчинг — графы для него
-уже экспортированы (см. ниже), планировщик ещё нет.
+Saturation arrives at a concurrency equal to the worker count; past that,
+requests queue. Lifting that ceiling is what continuous batching is for — the
+graphs for it are exported already (below), the scheduler is not written.
 
 ```bash
 export ASR_KEY=...
@@ -139,102 +197,115 @@ python3 tools/bench/bench.py --url http://localhost:8080 --voice male_deep --see
   --concurrency 4 --asr-url http://asr-host/v1 --asr-key "$ASR_KEY"
 ```
 
-## Устройство экспорта
+## How the export is put together
 
-Пять графов, все stateless — состояние ходит через входы и выходы:
+Five graphs, all stateless — state travels through inputs and outputs:
 
-| Граф | Роль |
+| Graph | Role |
 |---|---|
-| `flow_lm_main` | AR-остов, split K/V кэш в fp16, голова EOS |
-| `flow_lm_flow` | один шаг LSD-солвера: `(c, s, t, x) → flow_dir` |
-| `text_conditioner` | токены → эмбеддинги |
-| `mimi_encoder` | аудио → 1024-мерное обусловливание (`speaker_proj` вшит) |
-| `mimi_decoder` | латенты + состояние → аудио |
+| `flow_lm_main` | AR backbone, split K/V cache in fp16, EOS head |
+| `flow_lm_flow` | one step of the LSD solver: `(c, s, t, x) → flow_dir` |
+| `text_conditioner` | tokens → embeddings |
+| `mimi_encoder` | audio → 1024-dim conditioning (`speaker_proj` folded in) |
+| `mimi_decoder` | latents + state → audio |
 
-Два отличия от экспорта PocketTTS.cpp:
+Two departures from PocketTTS.cpp's export:
 
-- **`step` — вектор `[B]`, а не общий скаляр**, и RoPE берёт пер-строчное смещение. Строки
-  независимы, слот может стоять на любой позиции. Это даёт настоящий континуальный батчинг
-  вместо когорт в локстепе и убирает нужду в `pad`-выравнивании апстрима. Проверено: две строки
-  на позициях 41 и 17 в одном батче дают **побитово** тот же результат, что независимые прогоны.
-- **Один общий `step` вместо послойных**: 13 тензоров состояния вместо 18.
+- **`step` is a `[B]` vector rather than a shared scalar**, and RoPE takes a
+  per-row offset. Rows are independent and a slot may sit at any position. That is
+  what makes real continuous batching possible instead of lockstep cohorts, and it
+  removes the need for upstream's `pad` alignment. Verified: two rows at positions
+  41 and 17 in one batch give **bit-identical** results to independent runs.
+- **One shared `step` instead of per-layer ones**: 13 state tensors rather than 18.
 
-Контракт: референсное аудио для энкодера должно быть кратно 1920 сэмплам — граф трассируется
-frame-aligned, иначе в него запечётся ненулевой паддинг. Рантайм добивает сам.
+Contract: reference audio for the encoder must be a multiple of 1920 samples — the
+graph is traced frame-aligned, otherwise non-zero padding is baked into it. The
+runtime pads to that itself.
 
-## Референс для клонирования
+## Cloning references
 
-Сервер измеряет загруженный WAV и сохраняет его рядом с голосом вместе с отчётом:
-длительность, пик, уровень речи, DC, клиппинг, доля тишины, crest-фактор. Прогрев
-всегда «успешен» — энкодер одинаково охотно кодирует речь и шум, — поэтому без этого
-замера плохой клон не оставляет улик.
+The server measures an uploaded WAV and keeps it next to the voice along with a
+report: duration, peak, speech level, DC, clipping, silence fraction, crest
+factor. Warm-up always "succeeds" — the encoder is equally happy to encode speech
+and noise — so without that measurement a bad clone leaves no evidence.
 
-Измерено на 20 фразах с прогоном через ASR: поставляемое GenVoice состояние 9.32% WER,
-прогрев из того же аудио 8.70%, живая запись 44.1 кГц 13.04%. Длительность сама по себе
-почти не влияет (4.4 с чистой записи дают 10.56%), тишина по краям безвредна, а низкий
-уровень стоит около шести пунктов.
+Measured on 20 phrases through ASR: GenVoice's shipped state 9.32% WER, a warm-up
+from the same audio 8.70%, a live 44.1 kHz recording 13.04%. Duration itself
+barely matters (4.4 s of clean audio gives 10.56%), silence at the edges is
+harmless, and a low level costs about six points.
 
-## Ограничения
+## Limits
 
-- **Батчинг не реализован**, хотя графы его поддерживают и это проверено. Потолок —
-  число воркеров.
-- **Цена int8 не измерена по WER.** int8 даёт RTF 0.35 → 0.25, а вот его цена в качестве на этих
-  наборах тонет в шуме. Три базы сидов, WER:
+- **Batching is not implemented**, although the graphs support it and that is
+  verified. The ceiling is the worker count.
+- **The cost of int8 is not resolved by WER.** int8 takes RTF from 0.35 to 0.25;
+  what it costs in quality drowns in noise on these corpora. Three seed bases, WER:
 
-  | | короткие (20) | длинные (8) |
+  | | short (20) | long (8) |
   |---|---|---|
   | int8 per-tensor | 6.21 · 6.21 · 8.07 → 6.83% | 4.84 · 4.03 · 2.42 → 3.76% |
   | int8 per-channel | 6.83 · 11.18 · 7.45 → 8.49% | 1.61 · 5.65 · 0.81 → 2.69% |
-  | fp32 (один сид) | 7.45% | 4.03% |
+  | fp32 (one seed) | 7.45% | 4.03% |
 
-  Разброс между сидами на одном наборе доходит до 5 п.п. — больше, чем любая разница между
-  вариантами, и направление меняется от набора к набору. Более ранняя запись «int8 стоит
-  1.9 п.п. WER» опиралась ровно на один такой замер и не воспроизводится. Чтобы получить
-  ответ, нужен корпус масштаба GenVoice (800 генераций), а не 28 фраз. По умолчанию в CLI —
-  fp32, `--int8` включается осознанно.
+  The seed-to-seed spread on one corpus reaches five points — larger than any
+  difference between variants — and the direction flips between corpora. An earlier
+  note here claiming "int8 costs 1.9 points of WER" rested on exactly one such pair
+  and does not reproduce. Answering the question needs a corpus the size of
+  GenVoice's 800 generations, not 28 phrases.
 
-  Важнее другое: **WER здесь вообще не тот инструмент.** ASR расшифровывает фразу сквозь
-  тембровые артефакты, поэтому повреждение звука он не видит, а слушатель видит. Сравнение
-  сгенерированного звука с fp32 тоже не работает — цикл авторегрессивный, отличие в первом
-  кадре уводит траекторию, и на выходе две разные реализации фразы, а не эталон и копия
-  (SNR −1.8 дБ, то есть некоррелированы).
+  More to the point: **WER is the wrong instrument.** ASR transcribes cleanly
+  through timbre damage, so it cannot see what a listener hears immediately.
+  Comparing generated audio against fp32 does not work either — the loop is
+  autoregressive, a difference in the first frame sends the runs down different
+  trajectories, and what comes out is two distinct realisations of the sentence
+  rather than a reference and a copy (SNR −1.8 dB, i.e. uncorrelated).
 
-  Мерить надо графы напрямую: 600 кадров с teacher forcing, всем трём моделям подаётся один
-  и тот же fp32-латент, сравнивается выход.
+  Measure the graphs directly instead: 600 frames of teacher forcing, every variant
+  driven by the same fp32 latent, outputs compared.
 
-  | | остов FlowLM | LSD-голова | логит EOS |
+  | | FlowLM backbone | LSD head | EOS logit |
   |---|---|---|---|
   | int8 per-tensor | 9.58% | 5.52% | 0.103 |
   | **int8 per-channel** | **8.44%** | **3.84%** | 0.103 |
 
-  Отсюда дефолт — per-channel: он ближе к fp32 везде, а по LSD-голове на 30%, и именно она
-  пишет микроструктуру кадра, которая слышна как тембр. Размер тот же (76.2 против 75.9 МБ),
-  RTF тот же, порог EOS не сдвигается.
+  Hence per-channel as the default: closer to fp32 everywhere, and 30% closer on
+  the LSD head, which writes the fine structure of each frame — the part heard as
+  timbre. Same file size (76.2 vs 75.9 MB), same RTF, and the EOS logit does not
+  move.
 
-- **fp16 и bf16 на AVX2 бессмысленны.** У Zen 1 есть только F16C — конвертация fp16↔fp32,
-  без арифметики, поэтому ORT кастует в fp32 и считает там. Замер на доминирующем GEMV
-  1×1024 @ 1024×1024: fp32 48.6 мкс, fp16 57.7 мкс. Половинной точности как компромисса
-  между int8 и fp32 на этом железе не существует.
-- **Лицензия весов не определена.** У `genvoice/xVibePocketTTS` на HF поле license отсутствует,
-  указано лишь, что база Kyutai заявлена под CC BY 4.0. Для продакшена условия надо уточнять
-  у GenVoice. Код здесь и у всех зависимостей — MIT/Apache.
-- Governor `schedutil` разгоняет загруженные ядра до 2.9 ГГц, но с задержкой, которая бьёт по TTFB.
-  На проде стоит поставить `performance`.
+- **fp16 and bf16 are pointless on AVX2.** Zen 1 has F16C, which converts between
+  fp16 and fp32 but does no arithmetic, so ORT casts up to fp32 and computes there.
+  On the GEMV that dominates the AR step, 1×1024 @ 1024×1024: fp32 48.6 µs, fp16
+  57.7 µs. Half precision as a middle ground between int8 and fp32 does not exist
+  on this hardware.
+- **The weights' license is undetermined.** `genvoice/xVibePocketTTS` has no
+  license field on HuggingFace; it states only that the Kyutai base is declared
+  CC BY 4.0. For production, settle the terms with GenVoice. The code here and in
+  every dependency is MIT/Apache — see [NOTICE](NOTICE).
+- The `schedutil` governor does clock loaded cores up to 2.9 GHz, but with a lag
+  that shows up in TTFB. Use `performance` in production.
 
-## Структура
+## Layout
 
 ```
-src/model/     bundle.json, состояния, токенизатор
-src/engine/    сессии ORT, AR-цикл, LSD-солвер, конвейер декодера
-src/text/      ударения, нормализация, токенный чанкинг
-src/voice/     прогрев, реестр, safetensors
-src/audio/     wav, ресемплер (Kaiser polyphase), mp3
-src/numa/      топология, пиннинг, локальная аллокация
-src/http/      сервер, OpenAI API, метрики
-src/web/       веб-интерфейс (без сборки)
-tools/export/  экспорт в ONNX, квантизация, референсный рантайм на Python
-tools/bench/   нагрузка и WER/CER через ASR
+src/model/     bundle.json, states, tokenizer
+src/engine/    ORT sessions, AR loop, LSD solver, decoder pipeline
+src/text/      stress, normalisation, token chunking
+src/voice/     warm-up, registry, safetensors
+src/audio/     wav, resampler (Kaiser polyphase), mp3
+src/numa/      topology, pinning, local allocation
+src/http/      server, OpenAI API, metrics
+web/           console (Vite + TanStack Router, compiled into the binary)
+accent/        RUAccent sidecar
+tools/export/  ONNX export, quantisation, Python reference runtime
+tools/bench/   load and WER/CER through ASR
 ```
 
-`tools/export/pyrt.py` — референсная реализация того же пайплайна на Python. Она существует,
-чтобы C++ было с чем сверять: текстовый слой уже сверен с ней токен в токен.
+`tools/export/pyrt.py` is a reference implementation of the same pipeline in
+Python. It exists so the C++ has something to be checked against: the text layer
+is already token-for-token identical to it.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Attribution, and the situation with the model
+weights, are in [NOTICE](NOTICE).

@@ -7,7 +7,7 @@
 #include "httplib.h"
 #include "text/text.hpp"
 
-namespace xvibe {
+namespace nanotts {
 namespace {
 
 using nlohmann::json;
@@ -41,7 +41,7 @@ std::string protect(const std::string& text, std::vector<std::string>& saved) {
     const std::vector<uint32_t> word(cps.begin() + static_cast<long>(i),
                                      cps.begin() + static_cast<long>(j));
     if (manual) {
-      char buf[16];
+      char buf[24];
       std::snprintf(buf, sizeof(buf), "%04zu", saved.size());
       out += std::string(kPlaceholderPrefix) + buf + kPlaceholderSuffix;
       saved.push_back(utf8_encode(word));
@@ -62,7 +62,7 @@ bool restore(std::string& text, const std::vector<std::string>& saved) {
     return s;
   };
   for (size_t k = 0; k < saved.size(); ++k) {
-    char buf[16];
+    char buf[24];
     std::snprintf(buf, sizeof(buf), "%04zu", k);
     const std::string token = std::string(kPlaceholderPrefix) + buf + kPlaceholderSuffix;
     const std::string needle = lower(token);
@@ -176,4 +176,4 @@ Accentuator::Stats Accentuator::stats() const {
   return stats_;
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

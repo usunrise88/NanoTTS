@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace xvibe {
+namespace nanotts {
 
 // One recurrent tensor as the export declared it. `shape[0]` is the batch axis
 // and comes through as -1; the runtime substitutes the slot count.
@@ -51,4 +51,4 @@ struct Bundle {
   std::filesystem::path graph(const std::string& name, bool int8) const;
 };
 
-}  // namespace xvibe
+}  // namespace nanotts

@@ -32,27 +32,29 @@ COPY src ./src
 COPY --from=web /web/dist ./web/dist
 RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     && cmake --build build -j"$(nproc)" \
-    && strip build/xvibe-tts
+    && strip build/nanotts
 
 FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libnuma1 libmp3lame0 numactl ca-certificates \
+        libnuma1 libmp3lame0 numactl ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd -r -u 10001 -m -d /var/lib/xvibe xvibe
+    && useradd -r -u 10001 -m -d /var/lib/nanotts nanotts
 
 COPY --from=build /opt/onnxruntime/lib/libonnxruntime.so* /usr/local/lib/
-COPY --from=build /src/build/xvibe-tts /usr/local/bin/xvibe-tts
+COPY --from=build /src/build/nanotts /usr/local/bin/nanotts
 RUN ldconfig
 
-USER xvibe
-WORKDIR /var/lib/xvibe
+USER nanotts
+WORKDIR /var/lib/nanotts
 EXPOSE 8080
 
+# curl, not a /dev/tcp redirect: /bin/sh here is dash, which has no /dev/tcp,
+# so the redirect form reported every container unhealthy for its whole life.
 HEALTHCHECK --interval=15s --timeout=3s --start-period=40s \
-  CMD ["/bin/sh", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /healthz HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 200"]
+  CMD ["curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/healthz"]
 
-ENTRYPOINT ["/usr/local/bin/xvibe-tts"]
+ENTRYPOINT ["/usr/local/bin/nanotts"]
 # No --web: the console is compiled into the binary.
 CMD ["serve", "--bundle", "/models/bundle", "--tokenizer", "/models/bundle/tokenizer.model", \
      "--voices", "/data/voices", "--port", "8080"]

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(xvibetts CXX)
+project(nanotts CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -49,33 +49,33 @@ find_path(NUMA_INCLUDE numa.h)
 
 # The console is a Vite bundle compiled into the binary, so a deployment is one
 # file. Turn it off to serve a directory with --web instead (handy in dev).
-option(XVIBE_EMBED_WEB "Compile the web console into the binary" ON)
-set(XVIBE_WEB_DIST "${CMAKE_CURRENT_SOURCE_DIR}/web/dist" CACHE PATH "Built web bundle")
+option(NANOTTS_EMBED_WEB "Compile the web console into the binary" ON)
+set(NANOTTS_WEB_DIST "${CMAKE_CURRENT_SOURCE_DIR}/web/dist" CACHE PATH "Built web bundle")
 
-if(XVIBE_EMBED_WEB)
-  if(NOT EXISTS "${XVIBE_WEB_DIST}/index.html")
+if(NANOTTS_EMBED_WEB)
+  if(NOT EXISTS "${NANOTTS_WEB_DIST}/index.html")
     message(FATAL_ERROR
-      "XVIBE_EMBED_WEB is on but ${XVIBE_WEB_DIST}/index.html is missing.\n"
+      "NANOTTS_EMBED_WEB is on but ${NANOTTS_WEB_DIST}/index.html is missing.\n"
       "Build the console first:  cd web && npm ci && npm run build\n"
-      "or configure with -DXVIBE_EMBED_WEB=OFF to serve it from disk.")
+      "or configure with -DNANOTTS_EMBED_WEB=OFF to serve it from disk.")
   endif()
-  file(GLOB_RECURSE XVIBE_WEB_FILES "${XVIBE_WEB_DIST}/*")
-  set(XVIBE_WEB_GEN "${CMAKE_CURRENT_BINARY_DIR}/generated/web_assets_embedded.cpp")
+  file(GLOB_RECURSE NANOTTS_WEB_FILES "${NANOTTS_WEB_DIST}/*")
+  set(NANOTTS_WEB_GEN "${CMAKE_CURRENT_BINARY_DIR}/generated/web_assets_embedded.cpp")
   add_custom_command(
-    OUTPUT "${XVIBE_WEB_GEN}"
-    COMMAND ${CMAKE_COMMAND} -DINPUT_DIR=${XVIBE_WEB_DIST} -DOUTPUT=${XVIBE_WEB_GEN}
+    OUTPUT "${NANOTTS_WEB_GEN}"
+    COMMAND ${CMAKE_COMMAND} -DINPUT_DIR=${NANOTTS_WEB_DIST} -DOUTPUT=${NANOTTS_WEB_GEN}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_web.cmake"
-    DEPENDS ${XVIBE_WEB_FILES} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_web.cmake"
+    DEPENDS ${NANOTTS_WEB_FILES} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_web.cmake"
     COMMENT "Embedding web console"
     VERBATIM)
-  set(XVIBE_WEB_SOURCE "${XVIBE_WEB_GEN}")
-  message(STATUS "web console: embedded from ${XVIBE_WEB_DIST}")
+  set(NANOTTS_WEB_SOURCE "${NANOTTS_WEB_GEN}")
+  message(STATUS "web console: embedded from ${NANOTTS_WEB_DIST}")
 else()
-  set(XVIBE_WEB_SOURCE src/http/web_assets_none.cpp)
+  set(NANOTTS_WEB_SOURCE src/http/web_assets_none.cpp)
   message(STATUS "web console: not embedded (serve with --web)")
 endif()
 
-add_library(xvibe_core STATIC
+add_library(nanotts_core STATIC
   src/model/bundle.cpp
   src/model/state.cpp
   src/model/tokenizer.cpp
@@ -90,13 +90,13 @@ add_library(xvibe_core STATIC
   src/audio/mp3.cpp
   src/numa/topology.cpp
   src/numa/affinity.cpp
-  ${XVIBE_WEB_SOURCE}
+  ${NANOTTS_WEB_SOURCE}
 )
-target_include_directories(xvibe_core PUBLIC
+target_include_directories(nanotts_core PUBLIC
   src
   "${ORT_ROOT}/include"
   "${sentencepiece_SOURCE_DIR}/src")
-target_link_libraries(xvibe_core PUBLIC
+target_link_libraries(nanotts_core PUBLIC
   nlohmann_json::nlohmann_json
   httplib::httplib
   sentencepiece-static
@@ -104,26 +104,26 @@ target_link_libraries(xvibe_core PUBLIC
   pthread dl)
 
 if(NUMA_LIB)
-  target_compile_definitions(xvibe_core PUBLIC XVIBE_HAVE_NUMA=1)
-  target_include_directories(xvibe_core PUBLIC "${NUMA_INCLUDE}")
-  target_link_libraries(xvibe_core PUBLIC "${NUMA_LIB}")
+  target_compile_definitions(nanotts_core PUBLIC NANOTTS_HAVE_NUMA=1)
+  target_include_directories(nanotts_core PUBLIC "${NUMA_INCLUDE}")
+  target_link_libraries(nanotts_core PUBLIC "${NUMA_LIB}")
   message(STATUS "libnuma: ${NUMA_LIB}")
 else()
   message(WARNING "libnuma not found - NUMA pinning will be a no-op")
 endif()
 
 if(LAME_FOUND)
-  target_compile_definitions(xvibe_core PUBLIC XVIBE_HAVE_LAME=1)
-  target_link_libraries(xvibe_core PUBLIC PkgConfig::LAME)
+  target_compile_definitions(nanotts_core PUBLIC NANOTTS_HAVE_LAME=1)
+  target_link_libraries(nanotts_core PUBLIC PkgConfig::LAME)
   message(STATUS "libmp3lame: found")
 else()
   message(WARNING "libmp3lame not found - mp3 output disabled")
 endif()
 
-add_executable(xvibe-tts src/main.cpp src/http/server.cpp)
-target_link_libraries(xvibe-tts PRIVATE xvibe_core httplib::httplib)
-set_target_properties(xvibe-tts PROPERTIES
+add_executable(nanotts src/main.cpp src/http/server.cpp)
+target_link_libraries(nanotts PRIVATE nanotts_core httplib::httplib)
+set_target_properties(nanotts PROPERTIES
   BUILD_RPATH "${ORT_ROOT}/lib"
   INSTALL_RPATH "$ORIGIN/../lib")
 
-install(TARGETS xvibe-tts RUNTIME DESTINATION bin)
+install(TARGETS nanotts RUNTIME DESTINATION bin)

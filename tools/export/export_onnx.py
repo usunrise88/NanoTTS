@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export genvoice/xVibePocketTTS to ONNX for the xVibeTTS C++ runtime.
+"""Export genvoice/xVibePocketTTS to ONNX for the NanoTTS C++ runtime.
 
 Five stateless graphs — all recurrent state travels through inputs/outputs:
 
@@ -341,12 +341,12 @@ def export_mimi(model, out_dir: Path, cache_len: int, opset: int):
 
 
 def write_manifest(model, out_dir: Path, max_seq: int, wrapper: FlowLMMainWrapper,
-                   mimi_state=None):
+                   mimi_state=None, bundle_name: str = "nanotts"):
     fl = model.flow_lm
     cfg = model.config
     manifest = {
         "schema_version": 1,
-        "bundle_name": "xvibe-ru",
+        "bundle_name": bundle_name,
         "sample_rate": cfg.mimi.sample_rate,
         "frame_rate": cfg.mimi.frame_rate,
         "samples_per_frame": int(round(cfg.mimi.sample_rate / cfg.mimi.frame_rate)),
@@ -398,9 +398,17 @@ def write_manifest(model, out_dir: Path, max_seq: int, wrapper: FlowLMMainWrappe
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Export xVibePocketTTS to ONNX")
-    ap.add_argument("--config", default="/work/russian_local.yaml")
+    ap = argparse.ArgumentParser(
+        description="Export a Pocket TTS checkpoint -- the Kyutai base models or a fine-tune "
+                    "such as genvoice/xVibePocketTTS -- to the five ONNX graphs this runtime uses."
+    )
+    # Either a config (local path, https:// or hf://<repo>/<file>[@rev]) or one of
+    # pocket-tts's built-in language names. The two are mutually exclusive upstream.
+    ap.add_argument("--config", default=None)
+    ap.add_argument("--language", default=None,
+                    help="built-in pocket-tts config: english, german, spanish_24l, ...")
     ap.add_argument("--output-dir", default="/out")
+    ap.add_argument("--name", default=None, help="bundle_name written into the manifest")
     ap.add_argument("--max-seq", type=int, default=DEFAULT_MAX_SEQ)
     ap.add_argument("--opset", type=int, default=17)
     ap.add_argument(
@@ -410,12 +418,17 @@ def main():
         choices=["flow_main", "flow", "text", "mimi"],
     )
     args = ap.parse_args()
+    if args.config and args.language:
+        ap.error("--config and --language are mutually exclusive")
+    if not args.config and not args.language:
+        args.config = "/work/russian_local.yaml"
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print("Loading xVibePocketTTS ...")
-    model = TTSModel.load_model(config=args.config, temp=0.5, eos_threshold=-4.0)
+    print(f"Loading {args.config or args.language} ...")
+    model = TTSModel.load_model(config=args.config, language=args.language,
+                                temp=0.5, eos_threshold=-4.0)
     model.eval()
 
     print(f"Exporting (max_seq={args.max_seq}, opset={args.opset}) ...")
@@ -432,7 +445,17 @@ def main():
             mimi_state = export_mimi(model, out_dir, MIMI_CACHE_LEN, args.opset)
 
     if main_wrapper is not None:
-        write_manifest(model, out_dir, args.max_seq, main_wrapper, mimi_state)
+        write_manifest(model, out_dir, args.max_seq, main_wrapper, mimi_state,
+                       bundle_name=args.name or (args.language or "custom"))
+
+    # The runtime looks for the tokenizer next to the graphs, and pocket-tts may
+    # have pulled it from HuggingFace into a cache that does not outlive this
+    # container. Serialising it out of the loaded processor sidesteps resolving
+    # the config's path a second time.
+    tok_out = out_dir / "tokenizer.model"
+    proto = model.flow_lm.conditioner.tokenizer.sp.serialized_model_proto()
+    tok_out.write_bytes(proto)
+    print(f"  tokenizer.model  {len(proto) / 1e6:.1f} MB")
     print("Done.")
 
 

@@ -5,7 +5,7 @@
 
 #include "model/tokenizer.hpp"
 
-namespace xvibe {
+namespace nanotts {
 
 // `+о` -> `о` + U+0301. Marks on ё are removed: ё is inherently stressed, and
 // an extra combining acute pushes the tokenizer out of distribution. A `+` that
@@ -39,4 +39,4 @@ bool cp_is_alnum(uint32_t cp);
 bool cp_is_upper(uint32_t cp);
 uint32_t cp_to_upper(uint32_t cp);
 
-}  // namespace xvibe
+}  // namespace nanotts

@@ -2,14 +2,14 @@
 
 #include <stdexcept>
 
-#if XVIBE_HAVE_LAME
+#if NANOTTS_HAVE_LAME
 #include <lame/lame.h>
 #endif
 
-namespace xvibe {
+namespace nanotts {
 
 struct Mp3Encoder::Impl {
-#if XVIBE_HAVE_LAME
+#if NANOTTS_HAVE_LAME
   lame_global_flags* gf = nullptr;
   ~Impl() {
     if (gf) lame_close(gf);
@@ -18,7 +18,7 @@ struct Mp3Encoder::Impl {
 };
 
 bool Mp3Encoder::available() {
-#if XVIBE_HAVE_LAME
+#if NANOTTS_HAVE_LAME
   return true;
 #else
   return false;
@@ -26,7 +26,7 @@ bool Mp3Encoder::available() {
 }
 
 Mp3Encoder::Mp3Encoder(int sample_rate, int bitrate_kbps) : impl_(std::make_unique<Impl>()) {
-#if XVIBE_HAVE_LAME
+#if NANOTTS_HAVE_LAME
   impl_->gf = lame_init();
   if (!impl_->gf) throw std::runtime_error("lame_init failed");
   lame_set_in_samplerate(impl_->gf, sample_rate);
@@ -47,7 +47,7 @@ Mp3Encoder::Mp3Encoder(int sample_rate, int bitrate_kbps) : impl_(std::make_uniq
 Mp3Encoder::~Mp3Encoder() = default;
 
 std::vector<uint8_t> Mp3Encoder::encode(const float* samples, size_t n) {
-#if XVIBE_HAVE_LAME
+#if NANOTTS_HAVE_LAME
   std::vector<uint8_t> out(n + n / 4 + 7200);
   // lame_encode_buffer_ieee_float takes normalised [-1,1] samples, unlike
   // lame_encode_buffer_float which wants full-scale +/-32768. Feeding it
@@ -66,7 +66,7 @@ std::vector<uint8_t> Mp3Encoder::encode(const float* samples, size_t n) {
 }
 
 std::vector<uint8_t> Mp3Encoder::flush() {
-#if XVIBE_HAVE_LAME
+#if NANOTTS_HAVE_LAME
   std::vector<uint8_t> out(7200);
   const int written = lame_encode_flush(impl_->gf, out.data(), static_cast<int>(out.size()));
   out.resize(written > 0 ? static_cast<size_t>(written) : 0);
@@ -76,4 +76,4 @@ std::vector<uint8_t> Mp3Encoder::flush() {
 #endif
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

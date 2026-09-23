@@ -12,7 +12,7 @@
 #include "numa/affinity.hpp"
 #include "onnxruntime_cxx_api.h"
 
-namespace xvibe {
+namespace nanotts {
 
 struct EngineConfig {
   std::filesystem::path tokenizer_path;
@@ -132,4 +132,4 @@ class Engine {
   std::vector<float> scratch_noise_, scratch_x_, scratch_cond_;
 };
 
-}  // namespace xvibe
+}  // namespace nanotts

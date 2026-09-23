@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "bundle_name": "xvibe-ru",
+  "bundle_name": "nanotts-ru",
   "sample_rate": 24000,
   "frame_rate": 12.5,
   "samples_per_frame": 1920,

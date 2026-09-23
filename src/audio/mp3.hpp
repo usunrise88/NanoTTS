@@ -3,7 +3,7 @@
 #include <memory>
 #include <vector>
 
-namespace xvibe {
+namespace nanotts {
 
 // Streaming MP3 encoder. Present because OpenAI TTS clients default to mp3;
 // pcm remains the low-latency path.
@@ -23,4 +23,4 @@ class Mp3Encoder {
   std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace xvibe
+}  // namespace nanotts

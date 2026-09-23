@@ -4,7 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
-namespace xvibe {
+namespace nanotts {
 namespace fs = std::filesystem;
 using nlohmann::json;
 
@@ -86,4 +86,4 @@ void st_save(const fs::path& p,
   if (!f) throw std::runtime_error("failed writing " + p.string());
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

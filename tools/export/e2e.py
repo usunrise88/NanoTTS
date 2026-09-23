@@ -1,4 +1,4 @@
-"""End-to-end: precomputed xVibe voice -> ONNX pipeline -> WAV."""
+"""End-to-end: precomputed NanoTTS voice -> ONNX pipeline -> WAV."""
 import time, numpy as np
 from pyrt import XVibeRuntime, write_wav
 

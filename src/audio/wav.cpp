@@ -4,7 +4,7 @@
 #include <fstream>
 #include <stdexcept>
 
-namespace xvibe {
+namespace nanotts {
 namespace fs = std::filesystem;
 
 namespace {
@@ -133,4 +133,4 @@ void wav_write(const fs::path& p, const std::vector<float>& samples, int sample_
   f.write(reinterpret_cast<const char*>(pcm.data()), static_cast<std::streamsize>(pcm.size()));
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

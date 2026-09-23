@@ -35,7 +35,7 @@ function RouteComponent() {
   const { t } = useI18n()
   const { notify } = useNotifications()
 
-  const [text, setText] = useState(() => safeLocal('xvibe.text', DEFAULT_TEXT))
+  const [text, setText] = useState(() => safeLocal('nanotts.text', DEFAULT_TEXT))
   const [voice, setVoice] = useState('')
   const [format, setFormat] = useState<SpeechOptions['response_format']>('wav')
   const [temperature, setTemperature] = useState('0.5')
@@ -86,7 +86,7 @@ function RouteComponent() {
 
   const run = async () => {
     setRunning(true)
-    storeLocal('xvibe.text', text)
+    storeLocal('nanotts.text', text)
     try {
       const outcome = await synthesize(options())
       setResult(outcome)
@@ -114,7 +114,7 @@ function RouteComponent() {
         input: text,
         voice,
         response_format: format,
-        xvibe: {
+        nanotts: {
           temperature: Number(temperature),
           eos_threshold: Number(eos),
           seed: Number(seed) || 0,

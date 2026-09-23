@@ -4,7 +4,7 @@
 #include <set>
 #include <sstream>
 
-namespace xvibe {
+namespace nanotts {
 namespace {
 
 constexpr uint32_t kAcute = 0x0301;
@@ -280,4 +280,4 @@ std::vector<std::string> split_chunks(const Tokenizer& tok, const std::string& t
   return chunks;
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

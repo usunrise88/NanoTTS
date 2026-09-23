@@ -17,7 +17,7 @@ function resolve(theme: Theme): 'light' | 'dark' {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => safeLocal('xvibe.theme', 'system') as Theme)
+  const [theme, setThemeState] = useState<Theme>(() => safeLocal('nanotts.theme', 'system') as Theme)
   const [resolved, setResolved] = useState<'light' | 'dark'>(() => resolve(theme))
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next)
-    storeLocal('xvibe.theme', next)
+    storeLocal('nanotts.theme', next)
   }, [])
 
   const value = useMemo(() => ({ theme, resolved, setTheme }), [theme, resolved, setTheme])

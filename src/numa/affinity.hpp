@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace xvibe {
+namespace nanotts {
 
 // Memory that is bound to one NUMA node. On a 4-node single-socket EPYC a
 // remote read costs roughly 60% more than a local one, so every buffer a
@@ -52,4 +52,4 @@ void unbind_memory();
 
 bool numa_available_here();
 
-}  // namespace xvibe
+}  // namespace nanotts

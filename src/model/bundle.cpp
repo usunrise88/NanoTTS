@@ -4,7 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
-namespace xvibe {
+namespace nanotts {
 namespace fs = std::filesystem;
 using nlohmann::json;
 
@@ -111,4 +111,4 @@ fs::path Bundle::graph(const std::string& name, bool int8) const {
   return dir / (name + ".onnx");
 }
 
-}  // namespace xvibe
+}  // namespace nanotts

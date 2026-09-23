@@ -9,7 +9,7 @@
 
 #include "numa/affinity.hpp"
 
-namespace xvibe {
+namespace nanotts {
 namespace fs = std::filesystem;
 
 namespace {
@@ -110,4 +110,4 @@ std::string Topology::describe() const {
   return os.str();
 }
 
-}  // namespace xvibe
+}  // namespace nanotts
