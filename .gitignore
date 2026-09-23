@@ -1,6 +1,6 @@
 # Weights and exported graphs: fetched or produced, never committed.
 assets/weights/*.safetensors
-bundle/*.onnx
+bundle/**/*.onnx
 build/
 
 # The running service's bearer key.
