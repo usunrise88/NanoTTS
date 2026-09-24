@@ -51,6 +51,7 @@ Bundle Bundle::load(const fs::path& dir) {
   b.dir = dir;
   b.architecture = j.value("architecture", b.architecture);
   b.bundle_name = j.value("bundle_name", dir.filename().string());
+  b.language = j.value("language", b.language);
   b.sample_rate = j.value("sample_rate", b.sample_rate);
   b.samples_per_frame = j.value("samples_per_frame", b.samples_per_frame);
   b.frame_rate = j.value("frame_rate", b.frame_rate);

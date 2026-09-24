@@ -456,7 +456,19 @@ void Engine::generate(const std::string& text, const Voice& voice_in, const GenP
   // `+vowel` becomes U+0301 first, so hand-written stress is already in the
   // model's notation before the sidecar sees it — and so the sidecar can tell
   // which words to leave alone.
-  const std::string prepared = to_model_stress(text);
+  // Characters the checkpoint has no token for become <unk> otherwise, which
+  // the model reads as noise in the middle of a phrase. Done before chunking,
+  // while the text is still whole.
+  // Numbers first, while they are still digits, then the vocabulary guard.
+  // This checkpoint cannot read digits at all -- they come out as noise and
+  // take the neighbouring words with them -- so spelling them is part of
+  // making it legible, not a convenience.
+  std::string dropped;
+  const std::string prepared = map_to_vocabulary(
+      spell_numbers(to_model_stress(text), bundle_.language), *tokenizer_, dropped);
+  if (!dropped.empty())
+    std::fprintf(stderr, "text: dropped characters this checkpoint has no token for: %s\n",
+                 dropped.c_str());
   const bool accenting = params.auto_accent && cfg_.accent != nullptr;
 
   // Only as much text as the first chunk needs is accented on the critical path;

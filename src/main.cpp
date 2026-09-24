@@ -191,8 +191,11 @@ GenParams gen_params(const Args& a, const Bundle& b) {
 int cmd_chunks(const Args& a) {
   const auto b = Bundle::load(a.bundle);
   Tokenizer tok(a.tokenizer);
-  const std::string stressed = to_model_stress(a.text);
+  std::string dropped;
+  const std::string stressed =
+      map_to_vocabulary(spell_numbers(to_model_stress(a.text), b.language), tok, dropped);
   std::cout << "stressed: " << stressed << "\n";
+  if (!dropped.empty()) std::cout << "dropped:  " << dropped << "\n";
   // What the accent sidecar would be asked for before the first chunk can start.
   const auto [lead, rest] = split_lead(tok, stressed, (b.max_token_per_chunk * 70) / 100,
                                        b.pad_with_spaces, b.remove_semicolons);

@@ -27,6 +27,9 @@ struct Bundle {
    *  flow-matching sampler, vocoder, with voices as style vectors. */
   std::string architecture = "pocket";
   std::string bundle_name;
+  /** Which language's number words to use, and which stress conventions apply.
+   *  "ru" or "en"; anything else leaves numbers as digits. */
+  std::string language = "ru";
 
   int sample_rate = 24000;
   int samples_per_frame = 1920;

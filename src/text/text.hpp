@@ -16,6 +16,32 @@ std::string to_model_stress(const std::string& text);
 // trained on the `+` spelling, so the two notations have to be convertible.
 std::string to_plus_stress(const std::string& text);
 
+/** Replaces every numeric literal with its spelling.
+ *
+ *  Not a nicety for this checkpoint: it cannot read digits. Measured through
+ *  ASR, "В 2026 году выручка выросла на 15 процентов" comes back as "В
+ *  следующем году выручка выросла на фицитов" -- the digits take the words
+ *  around them with them -- while the same sentence spelled out is read
+ *  perfectly. `lang` is "ru" or "en"; anything else leaves the text alone.
+ */
+std::string spell_numbers(const std::string& text, const std::string& lang);
+
+/** Rewrites characters the checkpoint has no token for into ones it does, and
+ *  drops what has no equivalent.
+ *
+ *  The Russian vocabulary is narrower than the text people actually send:
+ *  straight and typographic quotes, en dashes, brackets and most symbols are
+ *  all missing, and SentencePiece turns each into the unknown token. Upstream
+ *  passes those straight through -- `Она ответила "нет".` tokenizes as
+ *  `Она ответила <unk> нет <unk> .` -- which is worse than either dropping
+ *  them or spelling them the way the model was trained to read.
+ *
+ *  Anything dropped is appended to `removed`, so a caller can say what went
+ *  rather than leaving a silent hole in the prosody.
+ */
+std::string map_to_vocabulary(const std::string& text, const Tokenizer& tok,
+                              std::string& removed);
+
 // Port of pocket_tts prepare_text_prompt. Returns the prepared text and the
 // model's frames_after_eos guess. The single-pass "  " -> " " collapse is not
 // idempotent; that is upstream behaviour and changing it changes the chunking.

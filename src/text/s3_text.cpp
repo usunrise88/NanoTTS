@@ -95,39 +95,6 @@ std::string filter(const std::string& text, const UnicodeIndexer& indexer, bool 
   return utf8_encode(out);
 }
 
-/** Replaces every numeric literal with its spelling. */
-std::string expand_numbers(const std::string& text, const std::string& lang) {
-  const auto cps = utf8_decode(text);
-  std::vector<uint32_t> out;
-  size_t i = 0;
-  while (i < cps.size()) {
-    const bool sign = cps[i] == '-' || cps[i] == 0x2212;
-    size_t j = i + (sign ? 1 : 0);
-    if (j >= cps.size() || !is_digit(cps[j])) {
-      out.push_back(cps[i]);
-      ++i;
-      continue;
-    }
-    // A literal is digits, optionally with one decimal separator inside.
-    bool seen_sep = false;
-    size_t k = j;
-    while (k < cps.size()) {
-      if (is_digit(cps[k])) { ++k; continue; }
-      if (!seen_sep && (cps[k] == '.' || cps[k] == ',') && k + 1 < cps.size() && is_digit(cps[k + 1])) {
-        seen_sep = true;
-        ++k;
-        continue;
-      }
-      break;
-    }
-    const std::string literal =
-        utf8_encode(std::vector<uint32_t>(cps.begin() + static_cast<long>(i), cps.begin() + static_cast<long>(k)));
-    const auto words = spell_number(literal, lang);
-    for (uint32_t cp : utf8_decode(words)) out.push_back(cp);
-    i = k;
-  }
-  return utf8_encode(out);
-}
 
 bool has_language_tag(const std::string& text) {
   return text.find("<ru>") != std::string::npos || text.find("<en>") != std::string::npos;
@@ -191,7 +158,7 @@ S3Text prepare_s3_text(const std::string& input, const UnicodeIndexer& indexer,
     }
   }
 
-  if (cfg.expand_numbers || !indexer.supports_digits()) text = expand_numbers(text, language);
+  if (cfg.expand_numbers || !indexer.supports_digits()) text = spell_numbers(text, language);
   text = filter(text, indexer, /*keep_digits=*/false, result.skipped);
 
   // Stress goes on last so the sidecar sees words rather than digits. It speaks

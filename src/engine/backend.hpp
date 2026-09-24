@@ -47,7 +47,7 @@ using VoicePtr = std::shared_ptr<const Voice>;
 struct GenParams {
   // pocket
   float temperature = 0.5f;
-  float eos_threshold = -4.0f;
+  float eos_threshold = -1.0f;
   int lsd_steps = 1;
   int max_frames = 500;
   // One latent frame per decoder call, which is how upstream drives Mimi and,

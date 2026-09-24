@@ -364,13 +364,16 @@ def write_manifest(model, out_dir: Path, max_seq: int, wrapper: FlowLMMainWrappe
         "remove_semicolons": bool(model.remove_semicolons),
         "model_recommended_frames_after_eos": model.model_recommended_frames_after_eos,
         "max_token_per_chunk": 50,
-        # -4.0 is pocket-tts's own DEFAULT_EOS_THRESHOLD. GenVoice's card quotes
-        # EOS -1 as the condition of their benchmark, and taking that as the
-        # serving default cost real quality: at -1.0 the model routinely runs
-        # past the end of the text and babbles. Measured on the same seeds,
-        # -1.0 -> -4.0 takes a long paragraph from 16.20% to 9.72% WER and its
-        # CER from 9.68% to 2.94%.
-        "defaults": {"temperature": 0.5, "eos_threshold": -4.0, "lsd_steps": 1},
+        # -1.0, which is what GenVoice's card quotes for this checkpoint. An
+        # earlier version of this file used pocket-tts's own -4.0 because it
+        # measured better on WER; that was the wrong instrument. The EOS logit
+        # rises unevenly at the end of a phrase and briefly touches -4 before
+        # falling back, so the lower threshold stops early: measured on the
+        # server across twenty phrases, nineteen of them end sooner and 6.2% of
+        # the total duration disappears -- the release of the final syllable,
+        # which ASR scores identically (4.62% WER either way) and a listener
+        # hears at once.
+        "defaults": {"temperature": 0.5, "eos_threshold": -1.0, "lsd_steps": 1},
         "flow_lm_state": (
             [{"name": "step", "dtype": "int64", "shape": ["batch"], "fill": "zeros"}]
             + [

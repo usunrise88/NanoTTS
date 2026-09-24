@@ -20,7 +20,7 @@
   "max_token_per_chunk": 50,
   "defaults": {
     "temperature": 0.5,
-    "eos_threshold": -4.0,
+    "eos_threshold": -1.0,
     "lsd_steps": 1
   },
   "flow_lm_state": [
@@ -436,5 +436,6 @@
       ],
       "fill": "zeros"
     }
-  ]
+  ],
+  "language": "ru"
 }

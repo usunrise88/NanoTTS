@@ -21,6 +21,11 @@ class Tokenizer {
   std::vector<int> encode(const std::string& text) const;
   std::string decode(const std::vector<int>& ids) const;
   int vocab_size() const;
+  /** True when this piece of text encodes to the unknown token. The Russian
+   *  checkpoint's vocabulary is narrower than real text: straight and
+   *  typographic quotes, en dashes and brackets are all absent, and feeding
+   *  their <unk> to the model is worse than not sending them at all. */
+  bool is_unknown(const std::string& text) const;
 
  private:
   std::unique_ptr<sentencepiece::SentencePieceProcessor> sp_;

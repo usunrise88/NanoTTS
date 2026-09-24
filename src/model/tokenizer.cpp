@@ -30,4 +30,19 @@ std::string Tokenizer::decode(const std::vector<int>& ids) const {
 
 int Tokenizer::vocab_size() const { return sp_->GetPieceSize(); }
 
+bool Tokenizer::is_unknown(const std::string& text) const {
+  // Encoded between two letters the model certainly knows: a character on its
+  // own encodes differently, because SentencePiece's word-boundary marker gets
+  // in the way. The only question asked is whether the unknown id appears --
+  // counting tokens instead would call an ordinary letter unknown whenever it
+  // happens to merge with its neighbours into one piece.
+  static const std::string guard = "\xd0\xb0";  // а
+  std::vector<int> ids;
+  if (!sp_->Encode(guard + text + guard, &ids).ok()) return true;
+  const int unk = sp_->unk_id();
+  for (int id : ids)
+    if (id == unk) return true;
+  return false;
+}
+
 }  // namespace nanotts

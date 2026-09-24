@@ -1,5 +1,7 @@
 #include "text/text.hpp"
 
+#include "text/numbers.hpp"
+
 #include <algorithm>
 #include <set>
 #include <sstream>
@@ -166,6 +168,129 @@ std::string to_plus_stress(const std::string& text) {
     out.push_back(cps[i]);
   }
   return utf8_encode(out);
+}
+
+namespace {
+
+/** Characters the Russian checkpoint has no token for, and what to read them
+ *  as. The quote mappings keep the pair asymmetric where the source is, so a
+ *  parenthetical still opens and closes; the dashes all collapse onto the one
+ *  the model knows. */
+struct Rewrite {
+  uint32_t from;
+  const char* to;  // empty means "drop"
+};
+const Rewrite kRewrites[] = {
+    {0x0022, "\xc2\xab"},      // "  -> «   (closing is fixed up below)
+    {0x201C, "\xc2\xab"},      // “
+    {0x201E, "\xc2\xab"},      // „
+    {0x2018, "'"},              // ‘
+    {0x201D, "\xc2\xbb"},      // ”
+    {0x2019, "'"},              // ’
+    {0x201A, ","},              // ‚
+    {0x2012, "\xe2\x80\x94"},  // ‒ -> —
+    {0x2013, "\xe2\x80\x94"},  // – -> —
+    {0x2015, "\xe2\x80\x94"},  // ― -> —
+    {0x2212, "-"},              // −
+    {0x0028, ","},              // (  a parenthetical reads as a comma
+    {0x0029, ","},              // )
+    {0x005B, ","},              // [
+    {0x005D, ","},              // ]
+    {0x007B, ","},              // {
+    {0x007D, ","},              // }
+    {0x002F, " "},              // /
+    {0x005C, " "},              // backslash
+    {0x007C, " "},              // |
+};
+
+const char* rewrite_for(uint32_t cp) {
+  for (const auto& r : kRewrites)
+    if (r.from == cp) return r.to;
+  return nullptr;
+}
+
+}  // namespace
+
+namespace {
+bool is_digit_cp(uint32_t cp) { return cp >= '0' && cp <= '9'; }
+}  // namespace
+
+std::string spell_numbers(const std::string& text, const std::string& lang) {
+  const auto cps = utf8_decode(text);
+  std::vector<uint32_t> out;
+  size_t i = 0;
+  while (i < cps.size()) {
+    const bool sign = cps[i] == '-' || cps[i] == 0x2212;
+    size_t j = i + (sign ? 1 : 0);
+    if (j >= cps.size() || !is_digit_cp(cps[j])) {
+      out.push_back(cps[i]);
+      ++i;
+      continue;
+    }
+    // A literal is digits, optionally with one decimal separator inside.
+    bool seen_sep = false;
+    size_t k = j;
+    while (k < cps.size()) {
+      if (is_digit_cp(cps[k])) { ++k; continue; }
+      if (!seen_sep && (cps[k] == '.' || cps[k] == ',') && k + 1 < cps.size() && is_digit_cp(cps[k + 1])) {
+        seen_sep = true;
+        ++k;
+        continue;
+      }
+      break;
+    }
+    const std::string literal =
+        utf8_encode(std::vector<uint32_t>(cps.begin() + static_cast<long>(i), cps.begin() + static_cast<long>(k)));
+    const auto words = spell_number(literal, lang);
+    for (uint32_t cp : utf8_decode(words)) out.push_back(cp);
+    i = k;
+  }
+  return utf8_encode(out);
+}
+
+std::string map_to_vocabulary(const std::string& text, const Tokenizer& tok,
+                              std::string& removed) {
+  const auto cps = utf8_decode(text);
+  std::string out;
+  // A straight quote is a single character doing two jobs; alternate it so the
+  // pair reads as an opening and a closing one.
+  bool quote_open = true;
+  for (uint32_t cp : cps) {
+    const std::string one = utf8_encode({cp});
+    if (!tok.is_unknown(one)) {
+      if (cp == 0x00AB) quote_open = false;
+      if (cp == 0x00BB) quote_open = true;
+      out += one;
+      continue;
+    }
+    const char* to = rewrite_for(cp);
+    if (to == nullptr) {
+      removed += one;
+      continue;
+    }
+    if (cp == 0x0022) {
+      out += quote_open ? "\xc2\xab" : "\xc2\xbb";
+      quote_open = !quote_open;
+      continue;
+    }
+    out += to;
+  }
+  // A bracket that became a comma next to real punctuation leaves ",." behind;
+  // the stronger mark wins.
+  std::string tidy;
+  const auto mapped = utf8_decode(out);
+  for (size_t i = 0; i < mapped.size(); ++i) {
+    const uint32_t cp = mapped[i];
+    if (cp == ',') {
+      size_t j = i + 1;
+      while (j < mapped.size() && mapped[j] == ' ') ++j;
+      if (j < mapped.size() && (mapped[j] == '.' || mapped[j] == ',' || mapped[j] == '!' ||
+                                mapped[j] == '?' || mapped[j] == ';' || mapped[j] == ':'))
+        continue;
+    }
+    tidy += utf8_encode({cp});
+  }
+  return tidy;
 }
 
 std::pair<std::string, int> prepare_text_prompt(const std::string& input, bool pad_with_spaces,
