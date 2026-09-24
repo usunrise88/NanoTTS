@@ -186,9 +186,17 @@ class MimiDecoderWrapper(nn.Module):
     """Latent frames + state -> audio, with the latent un-normalisation inlined.
 
     `steps_per_latent` (16 here: 200 Hz encoder rate over 12.5 Hz latent rate) is
-    how far the streaming state advances per decoded frame. Upstream decodes one
-    frame per call; decoding N at once is equivalent because the transformer is
-    causal and the convolutions carry their own overlap state.
+    how far the streaming state advances per decoded frame.
+
+    Upstream decodes one frame per call. Decoding N at once is **not**
+    equivalent, and an earlier version of this comment claimed it was. Measured
+    on one utterance's latents: torch frame-by-frame against torch in chunks of
+    fifteen is 2.7 dB SNR, and the same comparison through these graphs is the
+    same size. The dependence is a property of the model -- it shows up in the
+    unmodified torch decoder too -- not of this export, so the grouping is a
+    rendering choice rather than a free latency knob. What the export does
+    guarantee is that a given grouping is reproduced: matched groupings agree
+    between torch and ONNX far more closely than different ones do.
     """
 
     def __init__(self, model, state_names, steps_per_latent: int):

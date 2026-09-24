@@ -2,6 +2,10 @@ assets/weights/*.safetensors
 bundle/**/*.onnx
 build/
 
+# The registry's download directory. These are checkpoints fetched at runtime,
+# hundreds of megabytes each, and the server recreates any of them on demand.
+models/
+
 # Python bytecode.
 __pycache__/
 *.pyc

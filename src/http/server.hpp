@@ -98,6 +98,10 @@ class Service {
   ServerConfig cfg_;
   Bundle bundle_;
   std::string active_id_;
+  // The bundle named by --bundle usually lives outside the registry directory,
+  // so it has no entry there. Without this it would vanish from the list the
+  // moment something else was activated, leaving no way back to it.
+  std::filesystem::path startup_dir_;
   Topology topo_;
   std::unique_ptr<VoiceStore> store_;
   std::unique_ptr<ModelRegistry> registry_;

@@ -14,6 +14,7 @@ FROM ubuntu:24.04 AS build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake ninja-build git ca-certificates curl pkg-config \
+        libssl-dev \
         libnuma-dev libmp3lame-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -37,7 +38,7 @@ RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
 FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libnuma1 libmp3lame0 numactl ca-certificates curl \
+        libnuma1 libmp3lame0 numactl ca-certificates curl libssl3 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -r -u 10001 -m -d /var/lib/nanotts nanotts
 

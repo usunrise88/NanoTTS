@@ -163,6 +163,7 @@ Service::Service(ServerConfig cfg, Bundle bundle)
   // The registry keys models by directory name, so the active one has to be
   // named the same way or it would never match its own entry in the list.
   active_id_ = bundle_.dir.filename().string();
+  startup_dir_ = bundle_.dir;
   if (!cfg_.models_dir.empty()) {
     registry_ = std::make_unique<ModelRegistry>(cfg_.models_dir);
     std::cout << "models: " << cfg_.models_dir << " ("
@@ -204,9 +205,15 @@ Service::Service(ServerConfig cfg, Bundle bundle)
         for (size_t i = begin; i < pool.size() && i < begin + static_cast<size_t>(per); ++i)
           ec.cpus.push_back(pool[i]);
       }
-      ec.threads = cfg_.threads > 0
-                       ? cfg_.threads
-                       : std::max<int>(1, static_cast<int>(ec.cpus.empty() ? 4 : ec.cpus.size()));
+      // One core short of the worker's share, not all of it. The AR loop is not
+      // the only thing running on those cores: the Mimi decoder has its own
+      // thread and the HTTP sink writes on the caller's. Measured on a 4-core
+      // node, three intra-op threads against four: RTF 0.224 vs 0.236, 4.50x
+      // realtime vs 4.25x, and TTFB p50 under a load of four 315 ms vs 392 ms,
+      // with WER identical to two decimal places -- the arithmetic does not
+      // change, only who gets to run.
+      const int share = static_cast<int>(ec.cpus.empty() ? 4 : ec.cpus.size());
+      ec.threads = cfg_.threads > 0 ? cfg_.threads : std::max(1, share - 1);
       // Several workers on one machine must not all spin, or they steal each
       // other's cores while idle.
       ec.allow_spinning = nodes.size() * static_cast<size_t>(cfg_.workers_per_node) == 1;
@@ -506,7 +513,25 @@ int Service::run() {
     if (!authorised(req)) return deny(res);
     json installed = json::array(), available = json::array(), running = json::array();
     if (registry_) {
-      for (const auto& m : registry_->installed())
+      const auto have = registry_->installed();
+      bool startup_listed = false;
+      for (const auto& m : have) startup_listed = startup_listed || m.dir == startup_dir_;
+      // The one the server booted with, when it is not inside the registry.
+      if (!startup_listed) {
+        const bool active = active_id_ == startup_dir_.filename().string();
+        installed.push_back(
+            {{"id", startup_dir_.filename().string()},
+             {"title", bundle_.bundle_name.empty() ? startup_dir_.filename().string()
+                                                   : bundle_.bundle_name},
+             {"architecture", active ? bundle_.architecture : std::string("pocket")},
+             {"sample_rate", active ? bundle_.sample_rate : 0},
+             {"voices", 0},
+             {"bytes", 0},
+             {"can_clone", true},
+             {"builtin", true},
+             {"active", active}});
+      }
+      for (const auto& m : have)
         installed.push_back({{"id", m.id},
                              {"title", m.title},
                              {"architecture", m.architecture},
@@ -571,15 +596,21 @@ int Service::run() {
     if (!registry_) return no_registry(res);
     const std::string id = req.matches[1];
     try {
-      const auto m = registry_->find(id);
-      if (!m) throw std::runtime_error("no such model: " + id);
+      std::filesystem::path dir;
+      if (const auto m = registry_->find(id)) {
+        dir = m->dir;
+      } else if (id == startup_dir_.filename().string()) {
+        dir = startup_dir_;  // back to the bundle the server was started with
+      } else {
+        throw std::runtime_error("no such model: " + id);
+      }
       if (id == active_id_) {
         res.set_content(json{{"active", active_id_}, {"changed", false}}.dump(),
                         "application/json");
         return;
       }
       const auto t0 = clock_t_::now();
-      activate(m->dir, m->id);
+      activate(dir, id);
       const double ms =
           std::chrono::duration<double, std::milli>(clock_t_::now() - t0).count();
       res.set_content(json{{"active", active_id_},

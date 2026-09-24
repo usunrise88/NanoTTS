@@ -92,6 +92,16 @@ class Engine : public Backend {
   Ort::SessionOptions opts_ar_, opts_aux_;
 
   std::unique_ptr<Graph> g_text_, g_main_, g_flow_, g_enc_, g_dec_;
+
+  // Decoder call plumbing, built once. The names are a property of the bundle,
+  // and rebuilding them per call meant an allocation per state tensor per
+  // frame -- cheap at fifteen frames a call, not at one.
+  // Owned copies. The specs belong to whichever StateBuffers was passed in,
+  // and that is a local in generate(): caching c_str() into it left the names
+  // pointing at a destroyed object the moment the first caller returned.
+  std::vector<std::string> dec_in_storage_, dec_out_storage_;
+  std::vector<const char*> dec_in_names_, dec_out_names_;
+  void init_decoder_names(const StateBuffers& mimi);
   std::unique_ptr<Tokenizer> tokenizer_;
 
   Timings timings_;

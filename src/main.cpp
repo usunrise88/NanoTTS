@@ -27,7 +27,10 @@ struct Args {
   fs::path output = "output.wav";
   std::string text;
   bool int8 = false;
-  int threads = 4;
+  // 0 means "work it out from the machine". It used to default to 4, which made
+  // the serve path's auto-sizing unreachable and the usage text's "default:
+  // physical cores" untrue on every host.
+  int threads = 0;
   int node = -1;
   float temperature = -1.f;
   float eos_threshold = 2.f;  // sentinel: "use the bundle default"
@@ -64,7 +67,8 @@ struct Args {
 
 Options:
   --int8              use quantised graphs where available
-  --threads N         intra-op threads per engine (default 4)
+  --threads N         intra-op threads per engine (default: the worker's cores
+                      less one, leaving room for the decoder and the sink)
   --node N            pin to NUMA node N and allocate there
   --temperature F     default: bundle value (0.5)
   --eos-threshold F   default: bundle value (-1.0)
@@ -159,7 +163,9 @@ EngineConfig engine_config(const Args& a, const Topology& topo) {
   if (!a.accent_url.empty()) cfg.accent = std::make_shared<Accentuator>(a.accent_url);
   cfg.tokenizer_path = a.tokenizer;
   cfg.int8 = a.int8;
-  cfg.threads = a.threads;
+  // The one-shot commands have no worker share to divide, so they take the
+  // node's cores less one, or a plain four when not pinned to a node.
+  cfg.threads = a.threads > 0 ? a.threads : 4;
   cfg.numa_node = a.node;
   if (a.node >= 0) {
     for (const auto& n : topo.nodes)

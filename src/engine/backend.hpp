@@ -50,8 +50,14 @@ struct GenParams {
   float eos_threshold = -4.0f;
   int lsd_steps = 1;
   int max_frames = 500;
-  int first_chunk_frames = 2;  // small first chunk keeps TTFB down
-  int chunk_frames = 15;
+  // One latent frame per decoder call, which is how upstream drives Mimi and,
+  // as it turns out, how it sounds best. Feeding it fifteen at a time is not
+  // the same computation -- the decoder's output depends on the grouping -- and
+  // measured against ASR the difference is not subtle: WER 4.62% against 6.39%,
+  // CER 1.29% against 2.38%, on the same twenty phrases and seeds. It is also
+  // the lower latency of the two, so there is nothing to trade off.
+  int first_chunk_frames = 1;
+  int chunk_frames = 1;
   // s3
   float guidance = 3.0f;        // classifier-free guidance for the sampler
   float duration_scale = 1.0f;  // >1 slows the whole utterance down

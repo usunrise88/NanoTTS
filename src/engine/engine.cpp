@@ -268,32 +268,44 @@ std::vector<float> Engine::run_flow_steps(const float* cond, int lsd_steps, floa
   return x;
 }
 
+void Engine::init_decoder_names(const StateBuffers& mimi) {
+  dec_out_storage_.clear();
+  dec_out_storage_.reserve(mimi.count());
+  for (size_t i = 0; i < mimi.count(); ++i) dec_out_storage_.push_back("out_" + mimi.spec(i).name);
+
+  dec_in_storage_.clear();
+  dec_in_storage_.reserve(mimi.count() + 1);
+  dec_in_storage_.push_back("latent");
+  for (size_t i = 0; i < mimi.count(); ++i) dec_in_storage_.push_back(mimi.spec(i).name);
+
+  dec_in_names_.clear();
+  dec_in_names_.reserve(dec_in_storage_.size());
+  for (const auto& n : dec_in_storage_) dec_in_names_.push_back(n.c_str());
+
+  dec_out_names_.clear();
+  dec_out_names_.reserve(dec_out_storage_.size() + 1);
+  dec_out_names_.push_back("audio");
+  for (const auto& n : dec_out_storage_) dec_out_names_.push_back(n.c_str());
+}
+
 void Engine::decode_frames(const std::vector<float>& latents, int64_t frames, StateBuffers& mimi,
                            std::vector<float>& out) {
+  if (dec_in_names_.empty()) init_decoder_names(mimi);
+
   std::array<int64_t, 3> shape{1, frames, bundle_.latent_dim};
-  std::vector<const char*> in_names{"latent"};
   std::vector<Ort::Value> in_vals;
+  in_vals.reserve(mimi.count() + 1);
   in_vals.push_back(Ort::Value::CreateTensor<float>(mem_, const_cast<float*>(latents.data()),
                                                     latents.size(), shape.data(), shape.size()));
-  for (size_t i = 0; i < mimi.count(); ++i) {
-    in_names.push_back(mimi.spec(i).name.c_str());
-    in_vals.push_back(mimi.input(i, mem_));
-  }
+  for (size_t i = 0; i < mimi.count(); ++i) in_vals.push_back(mimi.input(i, mem_));
 
-  std::vector<std::string> out_state_names;
-  out_state_names.reserve(mimi.count());
-  for (size_t i = 0; i < mimi.count(); ++i) out_state_names.push_back("out_" + mimi.spec(i).name);
-
-  std::vector<const char*> out_names{"audio"};
   std::vector<Ort::Value> out_vals;
+  out_vals.reserve(mimi.count() + 1);
   out_vals.push_back(Ort::Value{nullptr});
-  for (size_t i = 0; i < mimi.count(); ++i) {
-    out_names.push_back(out_state_names[i].c_str());
-    out_vals.push_back(mimi.output(i, mem_));
-  }
+  for (size_t i = 0; i < mimi.count(); ++i) out_vals.push_back(mimi.output(i, mem_));
 
-  g_dec_->session().Run(Ort::RunOptions{nullptr}, in_names.data(), in_vals.data(), in_vals.size(),
-                        out_names.data(), out_vals.data(), out_vals.size());
+  g_dec_->session().Run(Ort::RunOptions{nullptr}, dec_in_names_.data(), in_vals.data(),
+                        in_vals.size(), dec_out_names_.data(), out_vals.data(), out_vals.size());
   mimi.swap();
 
   const auto info = out_vals[0].GetTensorTypeAndShapeInfo();
