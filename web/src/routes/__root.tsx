@@ -6,6 +6,7 @@ import { NotificationHistory } from '@/components/app/notification-history'
 import { ThemeToggle } from '@/components/app/theme-toggle'
 import { Toaster } from '@/components/ui/toaster'
 import { I18nProvider, useI18n, type MessageKey } from '@/lib/i18n'
+import { ModelProvider, useModel } from '@/lib/model'
 import { NotificationProvider } from '@/lib/notifications'
 import { ThemeProvider } from '@/lib/theme'
 
@@ -33,6 +34,21 @@ function PageHeader() {
   )
 }
 
+/** Which model is answering, in the shell rather than on one page: every number
+ *  the console shows belongs to a particular checkpoint, and after a switch the
+ *  page looks the same but means something else. */
+function ActiveModelBadge() {
+  const { model } = useModel()
+  if (!model) return null
+  return (
+    <span className="hidden items-center gap-1.5 rounded-[var(--radius-control)] bg-raised px-2 py-0.5 text-[11px] text-muted md:inline-flex">
+      <span className="font-medium text-text">{model.id}</span>
+      <span className="text-faint">{model.architecture}</span>
+      <span className="text-faint">{(model.sample_rate / 1000).toFixed(1)} kHz</span>
+    </span>
+  )
+}
+
 function Shell() {
   const { t } = useI18n()
   return (
@@ -43,6 +59,7 @@ function Shell() {
             <span className="text-sm font-semibold tracking-tight">NanoTTS</span>
             <span className="hidden text-xs text-faint sm:inline">{t('app.subtitle')}</span>
           </div>
+          <ActiveModelBadge />
           <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
           <Nav />
           <div className="ml-auto flex items-center gap-1.5">
@@ -70,7 +87,9 @@ export const Route = createRootRoute({
     <ThemeProvider>
       <I18nProvider>
         <NotificationProvider>
-          <Shell />
+          <ModelProvider>
+            <Shell />
+          </ModelProvider>
         </NotificationProvider>
       </I18nProvider>
     </ThemeProvider>

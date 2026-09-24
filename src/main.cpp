@@ -48,6 +48,7 @@ struct Args {
   std::string api_key;
   std::string cors_origin = "*";
   std::string accent_url;
+  std::filesystem::path models;
 };
 
 [[noreturn]] void usage() {
@@ -84,6 +85,8 @@ Serve options:
   --api-key KEY       require 'Authorization: Bearer KEY'
   --cors-origin O     Access-Control-Allow-Origin (default *, "" disables)
   --accent-url URL    RUAccent sidecar; without it callers must supply stress
+  --models DIR        model registry: lets the console install and switch
+                      checkpoints without a restart
 )";
   std::exit(2);
 }
@@ -144,6 +147,7 @@ Args parse(int argc, char** argv) {
     else if (k == "--api-key") a.api_key = need(i);
     else if (k == "--cors-origin") a.cors_origin = need(i);
     else if (k == "--accent-url") a.accent_url = need(i);
+    else if (k == "--models") a.models = need(i);
     else usage();
   }
   if (a.tokenizer.empty()) a.tokenizer = a.bundle / "tokenizer.model";
@@ -318,6 +322,7 @@ int cmd_serve(const Args& a) {
   cfg.api_key = a.api_key;
   cfg.cors_origin = a.cors_origin;
   cfg.accent_url = a.accent_url;
+  cfg.models_dir = a.models;
   if (!a.nodes.empty()) {
     std::stringstream ss(a.nodes);
     std::string tok;

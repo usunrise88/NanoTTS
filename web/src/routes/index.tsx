@@ -11,13 +11,14 @@ import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   apiUrl,
-  FRAME_RATE,
+  frameRate,
   listVoices,
   synthesize,
   type SpeechOptions,
   type SpeechResult,
   type Voice,
 } from '@/lib/api'
+import { useModel } from '@/lib/model'
 import { useDelayedFlag } from '@/lib/hooks'
 import { useI18n } from '@/lib/i18n'
 import { useNotifications } from '@/lib/notifications'
@@ -34,6 +35,12 @@ const DEFAULT_TEXT = 'Ст+арый з+амок сто+ит д+орого, а д
 function RouteComponent() {
   const { t } = useI18n()
   const { notify } = useNotifications()
+  const { model } = useModel()
+  // Which knobs mean anything is a property of the loaded architecture, not of
+  // the page. Showing an EOS threshold to a model with no EOS head, or a
+  // guidance scale to one with no classifier-free guidance, invites the user to
+  // tune something that is discarded.
+  const isS3 = model?.architecture === 's3'
 
   const [text, setText] = useState(() => safeLocal('nanotts.text', DEFAULT_TEXT))
   const [voice, setVoice] = useState('')
@@ -42,6 +49,8 @@ function RouteComponent() {
   const [eos, setEos] = useState('-4')
   const [seed, setSeed] = useState('0')
   const [firstChunk, setFirstChunk] = useState('2')
+  const [guidance, setGuidance] = useState('3')
+  const [durationScale, setDurationScale] = useState('1')
 
   const [voices, setVoices] = useState<Voice[] | null>(null)
   const [running, setRunning] = useState(false)
@@ -76,19 +85,23 @@ function RouteComponent() {
       input: text,
       voice,
       response_format: format,
-      temperature: Number(temperature),
-      eos_threshold: Number(eos),
       seed: Number(seed) || 0,
-      first_chunk_frames: Number(firstChunk) || 2,
+      ...(isS3
+        ? { guidance: Number(guidance), duration_scale: Number(durationScale) }
+        : {
+            temperature: Number(temperature),
+            eos_threshold: Number(eos),
+            first_chunk_frames: Number(firstChunk) || 2,
+          }),
     }),
-    [text, voice, format, temperature, eos, seed, firstChunk],
+    [text, voice, format, temperature, eos, seed, firstChunk, guidance, durationScale, isS3],
   )
 
   const run = async () => {
     setRunning(true)
     storeLocal('nanotts.text', text)
     try {
-      const outcome = await synthesize(options())
+      const outcome = await synthesize(options(), model)
       setResult(outcome)
       if (audioUrl.current) URL.revokeObjectURL(audioUrl.current)
       if (outcome.blob) {
@@ -161,22 +174,46 @@ function RouteComponent() {
                 aria-label={t('synth.format')}
               />
             </Field>
-            <Field label={t('synth.temperature')}>
-              <Input
-                type="number"
-                step="0.05"
-                value={temperature}
-                onChange={(event) => setTemperature(event.target.value)}
-              />
-            </Field>
-            <Field label={t('synth.eos')}>
-              <Input
-                type="number"
-                step="0.5"
-                value={eos}
-                onChange={(event) => setEos(event.target.value)}
-              />
-            </Field>
+            {isS3 ? (
+              <>
+                <Field label={t('synth.guidance')}>
+                  <Input
+                    type="number"
+                    step="0.5"
+                    value={guidance}
+                    onChange={(event) => setGuidance(event.target.value)}
+                  />
+                </Field>
+                <Field label={t('synth.durationScale')}>
+                  <Input
+                    type="number"
+                    step="0.05"
+                    min="0.1"
+                    value={durationScale}
+                    onChange={(event) => setDurationScale(event.target.value)}
+                  />
+                </Field>
+              </>
+            ) : (
+              <>
+                <Field label={t('synth.temperature')}>
+                  <Input
+                    type="number"
+                    step="0.05"
+                    value={temperature}
+                    onChange={(event) => setTemperature(event.target.value)}
+                  />
+                </Field>
+                <Field label={t('synth.eos')}>
+                  <Input
+                    type="number"
+                    step="0.5"
+                    value={eos}
+                    onChange={(event) => setEos(event.target.value)}
+                  />
+                </Field>
+              </>
+            )}
             <Field label={t('synth.seed')}>
               <Input
                 type="number"
@@ -184,15 +221,23 @@ function RouteComponent() {
                 onChange={(event) => setSeed(event.target.value)}
               />
             </Field>
-            <Field label={t('synth.firstChunk')}>
-              <Input
-                type="number"
-                min="1"
-                value={firstChunk}
-                onChange={(event) => setFirstChunk(event.target.value)}
-              />
-            </Field>
+            {isS3 ? null : (
+              <Field label={t('synth.firstChunk')}>
+                <Input
+                  type="number"
+                  min="1"
+                  value={firstChunk}
+                  onChange={(event) => setFirstChunk(event.target.value)}
+                />
+              </Field>
+            )}
           </Columns>
+
+          {model ? (
+            <p className="text-[12px] text-faint">
+              {t(model.architecture === 's3' ? 'synth.archNote.s3' : 'synth.archNote.pocket')}
+            </p>
+          ) : null}
 
           <Stack direction="row" gap="sm" align="center">
             <Button variant="primary" onClick={run} loading={running} disabled={!voice}>
@@ -217,7 +262,9 @@ function RouteComponent() {
             <Meter
               label={t('metric.audio')}
               value={result ? `${result.seconds.toFixed(2)} s` : '—'}
-              sub={result ? `${result.frames} ${t('metric.frames')}` : `${FRAME_RATE} fps`}
+              sub={
+                result ? `${result.frames} ${t('metric.frames')}` : `${frameRate(model).toFixed(1)} fps`
+              }
               loading={running}
             />
             <Meter

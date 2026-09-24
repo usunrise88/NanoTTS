@@ -100,10 +100,52 @@ Service::Lease Service::acquire() {
 const Voice& Service::voice_for(Worker& w, const std::string& id) {
   auto it = w.voices.find(id);
   if (it != w.voices.end()) return *it->second;
-  const auto path = store_.path_for(id);
+  const auto path = store_->path_for(id);
   if (!fs::exists(path)) throw std::runtime_error("unknown voice: " + id);
   auto state = w.engine->load_voice_file(path);
   return *w.voices.emplace(id, std::move(state)).first->second;
+}
+
+void Service::activate(const fs::path& dir, const std::string& id) {
+  // One switch at a time. Two of them interleaved would each drain half the
+  // machine and neither would ever get all of it.
+  std::lock_guard<std::mutex> once(activate_mu_);
+
+  auto next = Bundle::load(dir);
+  const fs::path voices = fs::exists(dir / "voices") ? dir / "voices" : cfg_.voices_dir;
+
+  // Build the new backends before taking the machine down. Loading five ONNX
+  // graphs takes seconds, and a bad bundle must fail while the old one is still
+  // answering rather than after it has been dismantled.
+  std::vector<std::unique_ptr<Backend>> built;
+  built.reserve(workers_.size());
+  for (auto& w : workers_) built.push_back(make_backend(next, w->cfg));
+
+  // Drain: collect every worker out of the free list, so nothing is mid
+  // utterance when its engine is replaced.
+  std::vector<Worker*> held;
+  {
+    std::unique_lock<std::mutex> lock(pool_mu_);
+    pool_cv_.wait(lock, [&] { return free_.size() == workers_.size(); });
+    held.swap(free_);
+  }
+
+  for (size_t i = 0; i < workers_.size(); ++i) {
+    std::lock_guard<std::mutex> wl(workers_[i]->mu);
+    workers_[i]->voices.clear();  // warmed for the old bundle, meaningless now
+    workers_[i]->engine = std::move(built[i]);
+  }
+  bundle_ = std::move(next);
+  active_id_ = id;
+  store_ = std::make_unique<VoiceStore>(voices);
+
+  {
+    std::lock_guard<std::mutex> lock(pool_mu_);
+    free_ = std::move(held);
+  }
+  pool_cv_.notify_all();
+  std::cout << "active model: " << id << " (" << bundle_.architecture << ", "
+            << bundle_.sample_rate << " Hz)\n";
 }
 
 // ---------------------------------------------------------------- service
@@ -116,8 +158,17 @@ Service::Service(ServerConfig cfg, Bundle bundle)
     : cfg_(std::move(cfg)),
       bundle_(std::move(bundle)),
       topo_(Topology::detect()),
-      store_(cfg_.voices_dir),
+      store_(std::make_unique<VoiceStore>(cfg_.voices_dir)),
       impl_(std::make_unique<Impl>()) {
+  // The registry keys models by directory name, so the active one has to be
+  // named the same way or it would never match its own entry in the list.
+  active_id_ = bundle_.dir.filename().string();
+  if (!cfg_.models_dir.empty()) {
+    registry_ = std::make_unique<ModelRegistry>(cfg_.models_dir);
+    std::cout << "models: " << cfg_.models_dir << " ("
+              << registry_->installed().size() << " installed, "
+              << registry_->available().size() << " available to fetch)\n";
+  }
   if (!cfg_.accent_url.empty()) {
     accent_ = std::make_shared<Accentuator>(cfg_.accent_url);
     // Probed rather than required: the sidecar loads models for ten seconds or
@@ -163,6 +214,7 @@ Service::Service(ServerConfig cfg, Bundle bundle)
 
       auto w = std::make_unique<Worker>();
       w->node = node;
+      w->cfg = ec;
       w->engine = make_backend(bundle_, ec);
       std::cout << "worker " << workers_.size() << ": node " << node << ", threads " << ec.threads
                 << ", cpus [";
@@ -409,25 +461,165 @@ int Service::run() {
   });
 
   // ---- catalogues --------------------------------------------------------
+  // OpenAI shape: the models a caller may name. Only the active one can be
+  // named in a synthesis request, so that is what this lists.
   srv.Get("/v1/models", [&](const httplib::Request& req, httplib::Response& res) {
     if (!authorised(req)) return deny(res);
     json data = json::array();
-    data.push_back({{"id", bundle_.dir.filename().string()},
+    data.push_back({{"id", active_id_},
                     {"object", "model"},
-                    {"owned_by", "nanotts"}});
+                    {"owned_by", "nanotts"},
+                    {"architecture", bundle_.architecture},
+                    {"sample_rate", bundle_.sample_rate},
+                    {"can_clone", !workers_.empty() && workers_.front()->engine->can_clone()}});
     res.set_content(json{{"object", "list"}, {"data", data}}.dump(), "application/json");
+  });
+
+  // ---- model registry ----------------------------------------------------
+  // Everything below is the console's: what is on disk, what can be pulled
+  // down, and how a switch is made without a restart.
+  auto no_registry = [&](httplib::Response& res) {
+    res.status = 501;
+    res.set_content(error_body("this server was started without --models, so it cannot install or "
+                               "switch models at runtime",
+                               "invalid_request_error", "registry_disabled")
+                        .dump(),
+                    "application/json");
+  };
+
+  auto job_json = [](const FetchJob& j) {
+    return json{{"id", j.id},
+                {"model", j.model},
+                {"state", j.state},
+                {"error", j.error},
+                {"stage", j.progress.stage},
+                {"file", j.progress.file},
+                {"done", j.progress.done},
+                {"total", j.progress.total},
+                {"step", j.progress.step},
+                {"steps", j.progress.steps},
+                {"started", j.started},
+                {"finished", j.finished}};
+  };
+
+  srv.Get("/v1/registry", [&](const httplib::Request& req, httplib::Response& res) {
+    if (!authorised(req)) return deny(res);
+    json installed = json::array(), available = json::array(), running = json::array();
+    if (registry_) {
+      for (const auto& m : registry_->installed())
+        installed.push_back({{"id", m.id},
+                             {"title", m.title},
+                             {"architecture", m.architecture},
+                             {"sample_rate", m.sample_rate},
+                             {"voices", m.voices},
+                             {"bytes", m.bytes},
+                             {"can_clone", m.can_clone},
+                             {"active", m.id == active_id_}});
+      for (const auto& e : registry_->available())
+        available.push_back({{"id", e.id},
+                             {"repo", e.repo},
+                             {"title", e.title},
+                             {"architecture", e.architecture},
+                             {"languages", e.languages},
+                             {"can_clone", e.can_clone},
+                             {"approx_bytes", e.approx_bytes}});
+      for (const auto& j : registry_->jobs()) running.push_back(job_json(j));
+    }
+    res.set_content(json{{"enabled", registry_ != nullptr},
+                         {"active", active_id_},
+                         {"active_architecture", bundle_.architecture},
+                         {"installed", installed},
+                         {"available", available},
+                         {"jobs", running}}
+                        .dump(),
+                    "application/json");
+  });
+
+  srv.Post("/v1/registry/install", [&](const httplib::Request& req, httplib::Response& res) {
+    if (!authorised(req)) return deny(res);
+    if (!registry_) return no_registry(res);
+    try {
+      const auto body = json::parse(req.body);
+      const auto id = body.at("id").get<std::string>();
+      const auto job = registry_->start_fetch(id);
+      res.set_content(json{{"job", job}}.dump(), "application/json");
+    } catch (const std::exception& e) {
+      errors_.fetch_add(1);
+      res.status = 400;
+      res.set_content(error_body(e.what(), "invalid_request_error", "install_failed").dump(),
+                      "application/json");
+    }
+  });
+
+  srv.Post(R"(/v1/registry/jobs/([\w-]+)/cancel)", [&](const httplib::Request& req,
+                                                        httplib::Response& res) {
+    if (!authorised(req)) return deny(res);
+    if (!registry_) return no_registry(res);
+    try {
+      registry_->cancel(req.matches[1]);
+      res.set_content(json{{"cancelled", std::string(req.matches[1])}}.dump(), "application/json");
+    } catch (const std::exception& e) {
+      res.status = 404;
+      res.set_content(error_body(e.what(), "invalid_request_error", "no_such_job").dump(),
+                      "application/json");
+    }
+  });
+
+  srv.Post(R"(/v1/registry/([\w.-]+)/activate)", [&](const httplib::Request& req,
+                                                      httplib::Response& res) {
+    if (!authorised(req)) return deny(res);
+    if (!registry_) return no_registry(res);
+    const std::string id = req.matches[1];
+    try {
+      const auto m = registry_->find(id);
+      if (!m) throw std::runtime_error("no such model: " + id);
+      if (id == active_id_) {
+        res.set_content(json{{"active", active_id_}, {"changed", false}}.dump(),
+                        "application/json");
+        return;
+      }
+      const auto t0 = clock_t_::now();
+      activate(m->dir, m->id);
+      const double ms =
+          std::chrono::duration<double, std::milli>(clock_t_::now() - t0).count();
+      res.set_content(json{{"active", active_id_},
+                           {"changed", true},
+                           {"architecture", bundle_.architecture},
+                           {"switch_ms", ms}}
+                          .dump(),
+                      "application/json");
+    } catch (const std::exception& e) {
+      errors_.fetch_add(1);
+      res.status = 400;
+      res.set_content(error_body(e.what(), "invalid_request_error", "activate_failed").dump(),
+                      "application/json");
+    }
+  });
+
+  srv.Delete(R"(/v1/registry/([\w.-]+))", [&](const httplib::Request& req,
+                                               httplib::Response& res) {
+    if (!authorised(req)) return deny(res);
+    if (!registry_) return no_registry(res);
+    try {
+      registry_->remove(req.matches[1], active_id_);
+      res.set_content(json{{"removed", std::string(req.matches[1])}}.dump(), "application/json");
+    } catch (const std::exception& e) {
+      res.status = 400;
+      res.set_content(error_body(e.what(), "invalid_request_error", "remove_failed").dump(),
+                      "application/json");
+    }
   });
 
   srv.Get("/v1/voices", [&](const httplib::Request& req, httplib::Response& res) {
     if (!authorised(req)) return deny(res);
     json data = json::array();
-    for (const auto& v : store_.list()) {
+    for (const auto& v : store_->list()) {
       json entry = {{"id", v.id},
                     {"prefix_frames", v.prefix_frames},
                     {"seconds", static_cast<double>(v.prefix_frames) / bundle_.frame_rate},
                     {"bytes", v.bytes},
                     {"created", v.created}};
-      const auto stored = store_.reference_report(v.id);
+      const auto stored = store_->reference_report(v.id);
       entry["reference"] = stored.empty() ? json(nullptr) : json::parse(stored, nullptr, false);
       data.push_back(std::move(entry));
     }
@@ -486,8 +678,8 @@ int Service::run() {
       const auto t0 = clock_t_::now();
       auto voice = lease->engine->warm_voice(audio.samples);
       const double ms = std::chrono::duration<double, std::milli>(clock_t_::now() - t0).count();
-      lease->engine->save_voice_file(store_.path_for(id), *voice);
-      store_.save_reference(id, file.content, report_json(report, src_rate).dump());
+      lease->engine->save_voice_file(store_->path_for(id), *voice);
+      store_->save_reference(id, file.content, report_json(report, src_rate).dump());
       // Invalidate every worker's cached copy. This worker's mutex is already
       // held by the lock above, and std::mutex is not recursive, so it has to
       // be skipped here rather than re-locked.
@@ -519,7 +711,7 @@ int Service::run() {
                                                        httplib::Response& res) {
     if (!authorised(req)) return deny(res);
     const std::string id = req.matches[1];
-    const auto path = store_.path_for(id);
+    const auto path = store_->path_for(id);
     if (!fs::exists(path)) {
       res.status = 404;
       res.set_content(error_body("unknown voice", "invalid_request_error", "not_found").dump(),
@@ -536,7 +728,7 @@ int Service::run() {
                                                     httplib::Response& res) {
     if (!authorised(req)) return deny(res);
     const std::string id = req.matches[1];
-    store_.remove(id);
+    store_->remove(id);
     for (auto& w : workers_) {
       std::lock_guard<std::mutex> wl(w->mu);
       w->voices.erase(id);

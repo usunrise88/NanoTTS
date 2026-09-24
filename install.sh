@@ -303,7 +303,7 @@ build_voices() {
 
 write_compose() {
   step "Writing $COMPOSE"
-  mkdir -p "$DATA"
+  mkdir -p "$DATA" "$PREFIX/models"
 
   local accent_service="" accent_flag="" depends=""
   if wants_accent; then
@@ -351,6 +351,8 @@ ${run_as}
     volumes:
       - ./bundle:/models/bundle:ro
       - ./voices:/data/voices
+      # Extra checkpoints the console downloads and switches to at runtime.
+      - ./models:/models/registry
     # NUMA pinning needs CAP_SYS_NICE for sched_setaffinity. Without it the
     # service still runs, it just loses locality and says so at startup.
     cap_add: [SYS_NICE]
@@ -359,6 +361,7 @@ ${run_as}
       - --bundle=/models/bundle
       - --tokenizer=${tokenizer_file}
       - --voices=/data/voices
+      - --models=/models/registry
       - --port=8080
 ${precision_flag}
 ${accent_flag}

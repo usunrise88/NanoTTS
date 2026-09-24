@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 const ITEMS = [
   { to: '/', key: 'nav.synth' },
   { to: '/voices', key: 'nav.voices' },
+  { to: '/models', key: 'nav.models' },
   { to: '/monitor', key: 'nav.monitor' },
 ] as const
 

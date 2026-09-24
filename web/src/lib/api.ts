@@ -82,10 +82,69 @@ export interface SpeechOptions {
   input: string
   voice: string
   response_format: 'wav' | 'mp3' | 'pcm'
-  temperature: number
-  eos_threshold: number
   seed: number
-  first_chunk_frames: number
+  /** pocket only; the s3 backend ignores them */
+  temperature?: number
+  eos_threshold?: number
+  first_chunk_frames?: number
+  /** s3 only; the pocket backend ignores them */
+  guidance?: number
+  duration_scale?: number
+}
+
+/** The model currently being served. Almost everything the console shows
+ *  depends on it -- the sample rate it decodes at, which knobs mean anything,
+ *  whether a voice can be uploaded -- so it is fetched rather than assumed. */
+export interface ActiveModel {
+  id: string
+  architecture: 'pocket' | 's3'
+  sample_rate: number
+  can_clone: boolean
+}
+
+export interface InstalledModel {
+  id: string
+  title: string
+  architecture: string
+  sample_rate: number
+  voices: number
+  bytes: number
+  can_clone: boolean
+  active: boolean
+}
+
+export interface AvailableModel {
+  id: string
+  repo: string
+  title: string
+  architecture: string
+  languages: string
+  can_clone: boolean
+  approx_bytes: number
+}
+
+export interface InstallJob {
+  id: string
+  model: string
+  state: 'running' | 'done' | 'failed' | 'cancelled'
+  error: string
+  stage: string
+  file: string
+  done: number
+  total: number
+  step: number
+  steps: number
+  started: number
+  finished: number
+}
+
+export interface Registry {
+  enabled: boolean
+  active: string
+  active_architecture: string
+  installed: InstalledModel[]
+  available: AvailableModel[]
+  jobs: InstallJob[]
 }
 
 export interface SpeechResult {
@@ -97,8 +156,38 @@ export interface SpeechResult {
   frames: number
 }
 
-export const SAMPLE_RATE = 24_000
-export const FRAME_RATE = 12.5
+/** Fallbacks for the moment before the active model is known. The real values
+ *  come from /v1/models: pocket runs at 24 kHz and 12.5 frames a second, s3 at
+ *  44.1 kHz and 14.36, and using one model's numbers to decode the other's
+ *  audio misreports every duration on the page. */
+export const DEFAULT_SAMPLE_RATE = 24_000
+
+export const frameRate = (model: ActiveModel | null) =>
+  model?.architecture === 's3' ? model.sample_rate / 3072 : 12.5
+
+export const activeModel = () =>
+  apiJson<{ data: ActiveModel[] }>('v1/models').then((r) => r.data[0])
+
+export const fetchRegistry = () => apiJson<Registry>('v1/registry')
+
+export const installModel = (id: string) =>
+  apiJson<{ job: string }>('v1/registry/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+
+export const cancelInstall = (job: string) =>
+  apiFetch(`v1/registry/jobs/${encodeURIComponent(job)}/cancel`, { method: 'POST' })
+
+export const activateModel = (id: string) =>
+  apiJson<{ active: string; changed: boolean; switch_ms?: number }>(
+    `v1/registry/${encodeURIComponent(id)}/activate`,
+    { method: 'POST' },
+  )
+
+export const removeModel = (id: string) =>
+  apiFetch(`v1/registry/${encodeURIComponent(id)}`, { method: 'DELETE' })
 
 export const listVoices = () => apiJson<{ data: Voice[] }>('v1/voices').then((r) => r.data)
 export const fetchStats = () => apiJson<Stats>('stats')
@@ -125,8 +214,12 @@ export const voiceStateUrl = (id: string) => apiUrl(`v1/voices/${encodeURICompon
 /** Streams the response so the measured latency is the first audio frame, not
  *  the last byte. Buffering the whole body would report a one-second wait for
  *  what is really a ~170 ms time to first sound. */
-export async function synthesize(options: SpeechOptions): Promise<SpeechResult> {
+export async function synthesize(
+  options: SpeechOptions,
+  model: ActiveModel | null,
+): Promise<SpeechResult> {
   const { input, voice, response_format, ...rest } = options
+  const sampleRate = model?.sample_rate ?? DEFAULT_SAMPLE_RATE
   const started = performance.now()
   const response = await apiFetch('v1/audio/speech', {
     method: 'POST',
@@ -150,8 +243,8 @@ export async function synthesize(options: SpeechOptions): Promise<SpeechResult> 
   const totalMs = performance.now() - started
 
   let seconds = 0
-  if (response_format === 'pcm') seconds = bytes / 4 / SAMPLE_RATE
-  else if (response_format === 'wav') seconds = Math.max(0, (bytes - 44) / 2 / SAMPLE_RATE)
+  if (response_format === 'pcm') seconds = bytes / 4 / sampleRate
+  else if (response_format === 'wav') seconds = Math.max(0, (bytes - 44) / 2 / sampleRate)
 
   const blob =
     response_format === 'pcm'
@@ -160,5 +253,5 @@ export async function synthesize(options: SpeechOptions): Promise<SpeechResult> 
           type: response_format === 'mp3' ? 'audio/mpeg' : 'audio/wav',
         })
 
-  return { blob, bytes, ttfbMs, totalMs, seconds, frames: Math.round(seconds * FRAME_RATE) }
+  return { blob, bytes, ttfbMs, totalMs, seconds, frames: Math.round(seconds * frameRate(model)) }
 }

@@ -23,6 +23,16 @@ FetchContent_Declare(httplib
   GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
   GIT_TAG v0.18.3
   GIT_SHALLOW TRUE)
+# HTTPS is not optional here: the model registry downloads checkpoints from
+# HuggingFace, and cpp-httplib only speaks TLS when it is built against OpenSSL.
+find_package(OpenSSL)
+if(OpenSSL_FOUND)
+  set(HTTPLIB_REQUIRE_OPENSSL ON CACHE BOOL "" FORCE)
+else()
+  message(WARNING
+    "OpenSSL not found: the server will build, but fetching a model over HTTPS "
+    "will fail at runtime with a clear error rather than silently.")
+endif()
 FetchContent_MakeAvailable(httplib)
 
 set(SPM_ENABLE_SHARED OFF CACHE BOOL "" FORCE)
@@ -77,6 +87,8 @@ endif()
 
 add_library(nanotts_core STATIC
   src/model/bundle.cpp
+  src/model/fetch.cpp
+  src/model/registry.cpp
   src/model/state.cpp
   src/model/tokenizer.cpp
   src/engine/engine.cpp

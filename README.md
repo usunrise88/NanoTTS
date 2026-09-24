@@ -140,6 +140,10 @@ What actually differs:
 | POST | `/v1/voices` | multipart `id` + `file` (WAV) → warm-up → `.safetensors`; **501** where the architecture cannot clone |
 | GET | `/v1/voices/{id}/state` | download the warmed state |
 | DELETE | `/v1/voices/{id}` | remove a voice |
+| GET | `/v1/registry` | what is installed, what can be downloaded, what is in flight |
+| POST | `/v1/registry/install` | `{"id": "TeraTTSv2"}` → starts a download, returns a job |
+| POST | `/v1/registry/{id}/activate` | switch the running server to that model |
+| DELETE | `/v1/registry/{id}` | remove an installed model |
 | GET | `/healthz`, `/readyz`, `/stats`, `/metrics` | operations |
 
 ```bash
@@ -154,6 +158,32 @@ curl -X POST localhost:8080/v1/audio/speech -H 'Content-Type: application/json' 
 The extras sit in their own object so an OpenAI client that knows nothing about
 them keeps working. `xvibe` is accepted there as an alias for `nanotts`, because
 that is what the object was called before the project was renamed.
+
+## Switching models while it runs
+
+Started with `--models DIR`, the server keeps a registry there and the console
+gains a Models page: it lists what is installed, downloads a checkpoint on
+demand with a progress bar, and switches the running server to it.
+
+The switch rebuilds every worker against the new bundle and takes about a
+second. It waits for the machine to go idle first — a backend cannot be pulled
+out from under a request halfway through an utterance — and builds the new
+engines before dismantling the old ones, so a bad bundle fails while the
+previous model is still answering. Measured switching a three-worker server
+between the two architectures: 1.1–1.3 s, after which `/v1/models` reports the
+new sample rate and whether it can clone.
+
+Only checkpoints released as ONNX can be downloaded this way, which is the same
+line as everywhere else: a Pocket TTS model has to be traced from its weights,
+and the serving image deliberately carries no Python to do it with. The API
+says so rather than failing obscurely.
+
+```bash
+curl -X POST localhost:8080/v1/registry/install \
+  -H 'Content-Type: application/json' -d '{"id":"TeraTTSv2"}'
+curl localhost:8080/v1/registry            # watch the job
+curl -X POST localhost:8080/v1/registry/TeraTTSv2/activate
+```
 
 ## EOS threshold
 

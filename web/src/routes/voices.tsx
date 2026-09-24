@@ -12,6 +12,7 @@ import { Table, TableEmpty, Td, Th } from '@/components/ui/table'
 import { deleteVoice, listVoices, voiceStateUrl, warmVoice, type Voice } from '@/lib/api'
 import { useDelayedFlag } from '@/lib/hooks'
 import { useI18n } from '@/lib/i18n'
+import { useModel } from '@/lib/model'
 import { useNotifications } from '@/lib/notifications'
 import { formatBytes } from '@/lib/utils'
 
@@ -19,6 +20,11 @@ const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 
 function RouteComponent() {
   const { t, locale } = useI18n()
+  const { model } = useModel()
+  // The upload form is not merely disabled for a model that cannot clone: the
+  // server answers 501, and offering a form that always fails is worse than
+  // saying why up front.
+  const canClone = model?.can_clone !== false
   const { notify } = useNotifications()
 
   const [voices, setVoices] = useState<Voice[] | null>(null)
@@ -81,6 +87,7 @@ function RouteComponent() {
 
   return (
     <Page>
+      {canClone ? (
       <Section title={t('voices.warmTitle')} description={t('voices.warmHint')}>
         <Stack gap="md">
           <Columns count={2} gap="sm">
@@ -106,6 +113,11 @@ function RouteComponent() {
           </Stack>
         </Stack>
       </Section>
+      ) : (
+        <Section title={t('voices.warmTitle')}>
+          <p className="text-[13px] text-muted">{t('voices.cloneUnsupported')}</p>
+        </Section>
+      )}
 
       <Section title={t('voices.title')}>
         {pending ? (

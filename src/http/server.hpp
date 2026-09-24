@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "engine/backend.hpp"
+#include "model/registry.hpp"
 #include "numa/topology.hpp"
 #include "text/accent.hpp"
 #include "voice/store.hpp"
@@ -35,6 +36,9 @@ struct ServerConfig {
   std::string cors_origin = "*";
   // Empty leaves stress to the caller; the quality cost is large and measured.
   std::string accent_url;
+  // Directory of installable models. Empty disables the registry, and with it
+  // the ability to download or switch models while the server is running.
+  std::filesystem::path models_dir;
   int mp3_bitrate = 96;
   size_t max_body_bytes = 32ull << 20;
 };
@@ -68,6 +72,9 @@ struct Worker {
   int node = -1;
   std::atomic<bool> busy{false};
   std::atomic<uint64_t> served{0};
+  // Kept so the worker can be rebuilt against another bundle without
+  // recomputing its share of the machine.
+  EngineConfig cfg;
 };
 
 class Service {
@@ -83,10 +90,19 @@ class Service {
 
   const Voice& voice_for(Worker& w, const std::string& id);
 
+  // Rebuilds every worker against `dir`'s bundle. Waits for the machine to go
+  // idle first: a backend cannot be swapped out from under a request that is
+  // halfway through an utterance.
+  void activate(const std::filesystem::path& dir, const std::string& id);
+
   ServerConfig cfg_;
   Bundle bundle_;
+  std::string active_id_;
   Topology topo_;
-  VoiceStore store_;
+  std::unique_ptr<VoiceStore> store_;
+  std::unique_ptr<ModelRegistry> registry_;
+  // Held for the whole of a switch, so two of them cannot interleave.
+  std::mutex activate_mu_;
   std::vector<std::unique_ptr<Worker>> workers_;
   std::shared_ptr<Accentuator> accent_;
 

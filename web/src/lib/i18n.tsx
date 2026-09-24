@@ -7,6 +7,48 @@ export type Locale = (typeof LOCALES)[number]
 const dictionary = {
   ru: {
     'nav.synth': 'Синтез',
+    'nav.models': 'Модели',
+
+    'models.title': 'Модели',
+    'models.description': 'Что установлено, что можно скачать и чем сейчас синтезируем.',
+    'models.installed': 'Установленные',
+    'models.available': 'Можно скачать',
+    'models.available.hint':
+      'Скачиваются модели, выпущенные сразу графами ONNX. Чекпоинт Pocket TTS так поставить нельзя: его нужно трассировать из весов, а для этого нужен Python из install.sh.',
+    'models.allInstalled': 'Всё из каталога уже установлено.',
+    'models.jobs': 'Загрузки',
+    'models.active': 'активна',
+    'models.activate': 'Переключить',
+    'models.install': 'Скачать',
+    'models.installing': 'Загрузка началась',
+    'models.switched': 'Модель переключена',
+    'models.removed': 'Модель удалена',
+    'models.cancel': 'Отменить',
+    'models.cancelled': 'Загрузка отменена',
+    'models.col.model': 'Модель',
+    'models.col.arch': 'Архитектура',
+    'models.col.rate': 'Частота',
+    'models.col.voices': 'Голоса',
+    'models.col.size': 'Размер',
+    'models.col.langs': 'Языки',
+    'models.job.running': 'идёт',
+    'models.job.done': 'готово',
+    'models.job.failed': 'ошибка',
+    'models.job.cancelled': 'отменена',
+    'models.disabled.title': 'Реестр выключен',
+    'models.disabled.body':
+      'Сервер запущен без --models, поэтому ставить и переключать модели на ходу он не может.',
+
+    'synth.guidance': 'Guidance',
+    'synth.durationScale': 'Темп',
+    'synth.archNote.pocket':
+      'Авторегрессия: звук идёт с первого кадра, задержка не зависит от длины текста.',
+    'synth.archNote.s3':
+      'Сэмплер решает фразу целиком, поэтому задержка до первого звука растёт с длиной текста.',
+
+    'voices.cloneUnsupported':
+      'Эта модель поставляется с готовыми стилевыми векторами и не умеет выучивать голос с записи.',
+
     'nav.voices': 'Голоса',
     'nav.monitor': 'Мониторинг',
     'app.subtitle': 'Синтез русской речи на CPU',
@@ -97,6 +139,47 @@ const dictionary = {
   },
   en: {
     'nav.synth': 'Synthesis',
+    'nav.models': 'Models',
+
+    'models.title': 'Models',
+    'models.description': 'What is installed, what can be downloaded, and what is speaking now.',
+    'models.installed': 'Installed',
+    'models.available': 'Available',
+    'models.available.hint':
+      'Only checkpoints released as ONNX can be downloaded here. A Pocket TTS model cannot: it has to be traced from its weights, which needs the Python toolchain in install.sh.',
+    'models.allInstalled': 'Everything in the catalogue is installed.',
+    'models.jobs': 'Downloads',
+    'models.active': 'active',
+    'models.activate': 'Switch to',
+    'models.install': 'Download',
+    'models.installing': 'Download started',
+    'models.switched': 'Model switched',
+    'models.removed': 'Model removed',
+    'models.cancel': 'Cancel',
+    'models.cancelled': 'Download cancelled',
+    'models.col.model': 'Model',
+    'models.col.arch': 'Architecture',
+    'models.col.rate': 'Rate',
+    'models.col.voices': 'Voices',
+    'models.col.size': 'Size',
+    'models.col.langs': 'Languages',
+    'models.job.running': 'running',
+    'models.job.done': 'done',
+    'models.job.failed': 'failed',
+    'models.job.cancelled': 'cancelled',
+    'models.disabled.title': 'Registry disabled',
+    'models.disabled.body':
+      'This server was started without --models, so it cannot install or switch models while running.',
+
+    'synth.guidance': 'Guidance',
+    'synth.durationScale': 'Pace',
+    'synth.archNote.pocket':
+      'Autoregressive: audio starts on the first frame, and latency does not grow with the text.',
+    'synth.archNote.s3':
+      'The sampler solves the whole utterance, so time to first sound grows with the length of the text.',
+
+    'voices.cloneUnsupported':
+      'This model ships fixed style vectors and cannot learn a voice from a recording.',
     'nav.voices': 'Voices',
     'nav.monitor': 'Monitoring',
     'app.subtitle': 'Russian speech synthesis on CPU',
